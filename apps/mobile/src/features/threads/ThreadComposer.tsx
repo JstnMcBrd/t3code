@@ -1,9 +1,12 @@
 import { isLiquidGlassSupported, LiquidGlassView } from "@callstack/liquid-glass";
+import {
+  threadRuntimeIsActive,
+  type EnvironmentThreadShell,
+} from "@t3tools/client-runtime/state/shell";
 import type {
   EnvironmentId,
   MessageId,
   ModelSelection,
-  OrchestrationThreadShell,
   ProviderInteractionMode,
   RuntimeMode,
   ServerConfig as T3ServerConfig,
@@ -89,13 +92,7 @@ export interface ThreadComposerProps {
   readonly connectionState: RemoteClientConnectionState;
   readonly connectionError: string | null;
   readonly environmentLabel: string | null;
-  /**
-   * Message sync phase for the selected thread (drives the status pill):
-   * "loading" = first fetch, nothing to show yet; "syncing" = cached messages
-   * are on screen while they reconcile with the server.
-   */
-  readonly threadSyncPhase?: "loading" | "syncing" | null;
-  readonly selectedThread: OrchestrationThreadShell;
+  readonly selectedThread: EnvironmentThreadShell;
   readonly serverConfig: T3ServerConfig | null;
   readonly queueCount: number;
   readonly activeThreadBusy: boolean;
@@ -313,10 +310,16 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
 
   const handleBlur = useCallback(() => {
     setIsFocused(false);
+<<<<<<< HEAD
   }, []);
   const showStopAction =
     props.selectedThread.session?.status === "running" ||
     props.selectedThread.session?.status === "starting";
+=======
+    onExpandedChange?.(false);
+  }, [onExpandedChange]);
+  const showStopAction = threadRuntimeIsActive(props.selectedThread.runtime);
+>>>>>>> 8f521e516e (Complete orchestration V2 frontend cutover)
 
   const sendLabel =
     props.connectionState !== "connected" || props.activeThreadBusy || props.queueCount > 0
