@@ -5,8 +5,11 @@
 - [Install and first run](./user/install.md)
 - [Permission modes](./user/permission-modes.md)
 - [Keyboard shortcuts](./user/keybindings.md)
+<<<<<<< HEAD
 - [Organizing threads](./user/thread-sidebar.md)
 - [Customize a project icon](./user/project-settings.md)
+=======
+>>>>>>> 290392fac9 (fix: reconcile rebase with latest main)
 - [Remote access](./user/remote-access.md)
 - [Keeping app and server in sync](./user/updating.md)
 - [Source control integrations](./user/source-control.md)
@@ -41,6 +44,7 @@ policy in [CONTRIBUTING.md](../CONTRIBUTING.md); agent rules in [AGENTS.md](../A
 - [Observability](./operations/observability.md)
 - [Relay observability](./operations/relay-observability.md)
 - [Mobile app store screenshots](./operations/mobile-app-store-screenshots.md)
+<<<<<<< HEAD
 - [Getting started](./getting-started/quick-start.md)
 - [Architecture](./architecture/overview.md)
 - [T3 Connect](./cloud/t3-connect-clerk.md)
@@ -51,3 +55,5 @@ policy in [CONTRIBUTING.md](../CONTRIBUTING.md); agent rules in [AGENTS.md](../A
   [Cursor](./providers/cursor.md)
 - [Reference](./reference/encyclopedia.md)
 - [User guides](./user/keybindings.md)
+=======
+>>>>>>> 290392fac9 (fix: reconcile rebase with latest main)
