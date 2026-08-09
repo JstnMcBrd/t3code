@@ -36,6 +36,7 @@ import {
 import Animated, { FadeInDown, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ControlPill } from "../../components/ControlPill";
 import type { ComposerEditorHandle } from "../../components/ComposerEditor";
 import type { StatusTone } from "../../components/StatusPill";
 import type { DraftComposerImageAttachment } from "../../lib/composerImages";
@@ -56,6 +57,11 @@ import {
   ThreadComposer,
 } from "./ThreadComposer";
 import { ThreadFeed } from "./ThreadFeed";
+import {
+  initialThreadEndFollowState,
+  reduceThreadEndFollowState,
+  threadEndFollowEnabled,
+} from "./thread-end-follow-state";
 import type { ThreadContentPresentation } from "./threadContentPresentation";
 
 export interface ThreadDetailScreenProps {
@@ -203,6 +209,10 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   const lastScrolledAnchorMessageIdRef = useRef<MessageId | null>(null);
   const [composerExpanded, setComposerExpanded] = useState(false);
   const [anchorMessageId, setAnchorMessageId] = useState<MessageId | null>(null);
+  const [endFollowState, setEndFollowState] = useState(() =>
+    initialThreadEndFollowState(selectedThreadKey),
+  );
+  const endFollowEnabled = threadEndFollowEnabled(endFollowState, selectedThreadKey);
   const composerBottomInset = composerExpanded ? 0 : Math.max(insets.bottom, 12);
   const contentPresentationKind = props.contentPresentation.kind;
   // The raw sync status enters "synchronizing" on every full fetch, cached or
@@ -338,6 +348,34 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
     composerEditorRef.current?.blur();
   }, []);
 
+  const handleEndFollowEnabledChange = useCallback(
+    (enabled: boolean) => {
+      setEndFollowState((current) =>
+        reduceThreadEndFollowState(current, {
+          type: "observed",
+          threadKey: selectedThreadKey,
+          enabled,
+        }),
+      );
+    },
+    [selectedThreadKey],
+  );
+
+  const handleScrollToEnd = useCallback(() => {
+    setEndFollowState((current) =>
+      reduceThreadEndFollowState(current, {
+        type: "scrollToEnd",
+        threadKey: selectedThreadKey,
+      }),
+    );
+    void Haptics.selectionAsync();
+    void scrollMessageToEnd({ animated: true, closeKeyboard: false }).catch(() => {
+      freeze.set(false);
+    });
+  }, [freeze, scrollMessageToEnd, selectedThreadKey]);
+
+  const showScrollToEndButton = contentPresentationKind === "ready" && !endFollowEnabled;
+
   const handleFeedTouchStart = useCallback((event: GestureResponderEvent) => {
     feedTouchStartRef.current = {
       pageX: event.nativeEvent.pageX,
@@ -398,6 +436,8 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
             layoutVariant={layoutVariant}
             usesAutomaticContentInsets={props.usesAutomaticContentInsets}
             onHeaderMaterialVisibilityChange={props.onHeaderMaterialVisibilityChange}
+            endFollowEnabled={endFollowEnabled}
+            onEndFollowEnabledChange={handleEndFollowEnabledChange}
             skills={selectedProviderSkills}
             loadEarlier={props.loadEarlier ?? null}
           />
@@ -420,6 +460,22 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
               list's bottom inset, so any padding above the pill/composer
               pushes the resting content floor up by the same amount. */}
           <View ref={composerOverlayRef} onLayout={onComposerLayout} className="w-full">
+            {showScrollToEndButton ? (
+              <Animated.View
+                pointerEvents="box-none"
+                className="absolute -top-28 left-0 right-0 z-20 items-center"
+                entering={FadeInDown.duration(160)}
+                exiting={FadeOut.duration(100)}
+              >
+                <ControlPill
+                  accessibilityLabel="Scroll to end"
+                  activateOnPressIn
+                  className="border border-border bg-card shadow-md shadow-black/10"
+                  icon={{ ios: "chevron.down", android: "keyboard_arrow_down" }}
+                  onPress={handleScrollToEnd}
+                />
+              </Animated.View>
+            ) : null}
             <View className="w-full self-center" style={{ maxWidth: contentMaxWidth }}>
               {props.activePendingApproval || props.activePendingUserInput ? (
                 <Animated.View
