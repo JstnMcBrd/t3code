@@ -49,7 +49,7 @@ index a54e619eb39e3402fa63f2ee4f734063d4f8fc58..066b01259a3c8ad9532688606be3d29a
              @"subactions": subactionsArray,
          };
 diff --git a/ios/Shared/MenuViewImplementation.swift b/ios/Shared/MenuViewImplementation.swift
-index 5c4e0da4292b15d3a27b5ea1555f11452a470815..d1fc3efd581fe83efa2b5aba1857e298f57f866d 100644
+index 5c4e0da4292b15d3a27b5ea1555f11452a470815..db134864676ed83dbcd895d7a1bde38e8037a005 100644
 --- a/ios/Shared/MenuViewImplementation.swift
 +++ b/ios/Shared/MenuViewImplementation.swift
 @@ -59,18 +59,43 @@ public class MenuViewImplementation: UIButton {
@@ -97,7 +97,7 @@ index 5c4e0da4292b15d3a27b5ea1555f11452a470815..d1fc3efd581fe83efa2b5aba1857e298
      func setup () {
          let menu = UIMenu(title: _title,
              identifier: nil,
-@@ -86,8 +111,71 @@ public class MenuViewImplementation: UIButton {
+@@ -86,8 +111,98 @@ public class MenuViewImplementation: UIButton {
              }
          }
  
@@ -138,8 +138,35 @@ index 5c4e0da4292b15d3a27b5ea1555f11452a470815..d1fc3efd581fe83efa2b5aba1857e298
 +        }
 +        var visited: Set<ObjectIdentifier> = []
 +        for interaction in candidates where visited.insert(ObjectIdentifier(interaction)).inserted {
-+            interaction.updateVisibleMenu { _ in menu }
++            // The block receives whichever menu level is currently on screen —
++            // the navigated submenu when the user picked inside one, not the
++            // root. Swap in the matching node from the rebuilt tree (stable
++            // identifiers from the JS action ids) so that level updates in
++            // place; returning an unrelated menu instead makes UIKit render it
++            // as navigation into a foreign menu, with a stale or blank
++            // expanded-submenu header row above the actions. The root carries
++            // an auto-generated identifier that never matches, so it falls
++            // through to a children-only replacement.
++            interaction.updateVisibleMenu { [weak self] visibleMenu in
++                guard let self = self else { return visibleMenu }
++                if let replacement = self.menuMatching(visibleMenu.identifier, in: menu) {
++                    return replacement
++                }
++                return visibleMenu.replacingChildren(menu.children)
++            }
 +        }
++    }
++
++    private func menuMatching(_ identifier: UIMenu.Identifier, in menu: UIMenu) -> UIMenu? {
++        if menu.identifier == identifier {
++            return menu
++        }
++        for element in menu.children {
++            if let submenu = element as? UIMenu, let match = menuMatching(identifier, in: submenu) {
++                return match
++            }
++        }
++        return nil
 +    }
 +
 +    private var longPressInteraction: UIContextMenuInteraction?
