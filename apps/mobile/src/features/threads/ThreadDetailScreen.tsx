@@ -40,8 +40,9 @@ import {
   KeyboardController,
   KeyboardStickyView,
   useKeyboardState,
+  useReanimatedKeyboardAnimation,
 } from "react-native-keyboard-controller";
-import Animated, { FadeInDown, FadeOut } from "react-native-reanimated";
+import Animated, { FadeInDown, FadeOut, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ControlPill } from "../../components/ControlPill";
@@ -200,7 +201,6 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   const insets = useSafeAreaInsets();
   const isKeyboardVisible = useKeyboardState((state) => state.isVisible);
   const windowHeight = useWindowDimensions().height;
-  const keyboardHeight = useKeyboardState((state) => state.height);
   const navigationHeaderHeight = useContext(HeaderHeightContext) || insets.top + 44;
   const agentLabel = `${props.selectedThread.modelSelection.instanceId} agent`;
   const selectedThreadKey = scopedThreadKey(props.environmentId, props.selectedThread.id);
@@ -258,14 +258,21 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
       setCollapsedUserInputRequestId(activeUserInputRequestId);
     }
   }, [activeUserInputRequestId, userInputCollapsed]);
-  const pendingUserInputMaxHeight = derivePendingUserInputMaxHeight({
-    windowHeight,
-    keyboardHeight: isKeyboardVisible ? keyboardHeight : 0,
-    navigationHeaderHeight,
-    // With the composer out of the slot, only its bottom inset still overlaps.
-    composerOverlapHeight:
-      activeUserInputRequestId !== null ? composerBottomInset : composerOverlapHeight,
-  });
+  // The card's max height tracks the keyboard's ANIMATED height, so it
+  // resizes frame-by-frame with the keyboard instead of correcting itself in
+  // a second animation once the hide settles (the binary visibility state
+  // only flips on keyboardDidHide).
+  const keyboardAnimation = useReanimatedKeyboardAnimation();
+  const pendingUserInputMaxHeightStyle = useAnimatedStyle(() => ({
+    maxHeight: derivePendingUserInputMaxHeight({
+      windowHeight,
+      keyboardHeight: Math.abs(keyboardAnimation.height.value),
+      navigationHeaderHeight,
+      // The questionnaire owns the composer slot, so only the composer's
+      // bottom inset still overlaps.
+      composerOverlapHeight: composerBottomInset,
+    }),
+  }));
   const estimatedOverlayHeight = composerOverlapHeight;
   // The overlay's measured height includes the home-indicator inset (the
   // composer pads it), but contentInsetAdjustmentBehavior="automatic" makes
@@ -535,7 +542,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                   {props.activePendingUserInput ? (
                     <PendingUserInputCard
                       pendingUserInput={props.activePendingUserInput}
-                      maxHeight={pendingUserInputMaxHeight}
+                      maxHeightStyle={pendingUserInputMaxHeightStyle}
                       collapsed={userInputCollapsed}
                       onToggleCollapsed={handleToggleUserInputCollapsed}
                       onStopThread={props.onStopThread}
