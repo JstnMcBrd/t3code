@@ -1,10 +1,17 @@
 diff --git a/ios/Shared/MenuViewImplementation.swift b/ios/Shared/MenuViewImplementation.swift
-index 5c4e0da4292b15d3a27b5ea1555f11452a470815..ea19f2eec02dd78fbc78cc455c91b4e71e734d70 100644
+index 5c4e0da4292b15d3a27b5ea1555f11452a470815..41795a3e53a33ca0e7c608432737bee13c92be84 100644
 --- a/ios/Shared/MenuViewImplementation.swift
 +++ b/ios/Shared/MenuViewImplementation.swift
-@@ -88,6 +88,41 @@ public class MenuViewImplementation: UIButton {
+@@ -87,7 +87,65 @@ public class MenuViewImplementation: UIButton {
+         }
  
          self.menu = menu
++        // An action fired with keepsMenuPresented leaves the menu on screen,
++        // but the presented copy is a snapshot: replacing self.menu alone
++        // never repaints it. Push the rebuilt tree into whichever interaction
++        // is showing it so checkmarks and subtitles track the new JS state
++        // (no-op while nothing is presented).
++        self.refreshPresentedMenu(menu)
          self.showsMenuAsPrimaryAction = !shouldOpenOnLongPress
 +        // In long-press mode the button must not intercept touches: as a
 +        // full-bounds contentView it sits IN FRONT of the React children of
@@ -15,6 +22,23 @@ index 5c4e0da4292b15d3a27b5ea1555f11452a470815..ea19f2eec02dd78fbc78cc455c91b4e7
 +        // the wrapped content as the zoom preview.
 +        self.isUserInteractionEnabled = !shouldOpenOnLongPress
 +        self.updateLongPressInteraction()
++    }
++
++    private func refreshPresentedMenu(_ menu: UIMenu) {
++        // Tap mode presents through the button's built-in interaction,
++        // long-press mode through the superview-hosted one; cover both (plus
++        // the interaction added in init) and dedupe by identity.
++        var candidates = self.interactions.compactMap { $0 as? UIContextMenuInteraction }
++        if let builtin = self.contextMenuInteraction {
++            candidates.append(builtin)
++        }
++        if let host = longPressInteraction {
++            candidates.append(host)
++        }
++        var visited: Set<ObjectIdentifier> = []
++        for interaction in candidates where visited.insert(ObjectIdentifier(interaction)).inserted {
++            interaction.updateVisibleMenu { _ in menu }
++        }
 +    }
 +
 +    private var longPressInteraction: UIContextMenuInteraction?
@@ -44,3 +68,27 @@ index 5c4e0da4292b15d3a27b5ea1555f11452a470815..ea19f2eec02dd78fbc78cc455c91b4e7
      }
  
      public override func reactSetFrame(_ frame: CGRect) {
+diff --git a/ios/Shared/RCTMenuItem.swift b/ios/Shared/RCTMenuItem.swift
+index bb6bb2b7ad56135089f267587c974b166760539d..43e96f209480c3b076786cd1772f1291fa236dce 100644
+--- a/ios/Shared/RCTMenuItem.swift
++++ b/ios/Shared/RCTMenuItem.swift
+@@ -103,10 +103,17 @@ class RCTMenuAction {
+                 subMenuActions.append(subaction.createUIMenuElement(handler))
+             }
+             var menu: UIMenu;
++            // Stable identifiers let updateVisibleMenu match submenu nodes in
++            // place, so a refresh while the menu is presented keeps the user's
++            // current submenu level instead of popping back to the root.
++            let menuIdentifier = identifier.map { UIMenu.Identifier(rawValue: $0.rawValue) }
+             if self.displayInline {
+-                menu = UIMenu(title: title, image: image, options: .displayInline, children: subMenuActions)
++                menu = UIMenu(title: title, image: image, identifier: menuIdentifier, options: .displayInline, children: subMenuActions)
+             } else {
+-                menu = UIMenu(title: title, image: image, children: subMenuActions)
++                menu = UIMenu(title: title, image: image, identifier: menuIdentifier, children: subMenuActions)
++            }
++            if #available(iOS 15.0, *) {
++                menu.subtitle = subtitle
+             }
+ 
+             if #available(iOS 16.0, *) {

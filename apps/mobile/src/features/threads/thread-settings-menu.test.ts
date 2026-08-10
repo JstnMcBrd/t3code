@@ -213,6 +213,30 @@ describe("buildThreadSettingsMenu", () => {
     });
   });
 
+  it("keeps the menu presented for picks but not for the settings hand-off", () => {
+    const menu = buildThreadSettingsMenu(baseInput());
+
+    const modelItems = menu.actions.find((action) => action.title === "Model")?.subactions ?? [];
+    expect(
+      modelItems.find((action) => action.title === "gpt-next")?.attributes?.keepsMenuPresented,
+    ).toBe(true);
+    expect(
+      menu.actions.find((action) => action.title === "Fast mode")?.attributes?.keepsMenuPresented,
+    ).toBe(true);
+    const reasoningItems =
+      menu.actions.find((action) => action.title === "Reasoning")?.subactions ?? [];
+    const runtimeItems =
+      menu.actions.find((action) => action.title === "Runtime")?.subactions ?? [];
+    expect(
+      [...reasoningItems, ...runtimeItems].every(
+        (action) => action.attributes?.keepsMenuPresented === true,
+      ),
+    ).toBe(true);
+
+    // The sheet hand-off must dismiss the menu before presenting.
+    expect(menu.actions.at(-1)?.subactions?.[0]?.attributes).toBeUndefined();
+  });
+
   it("sections models by provider only when multiple groups are offered", () => {
     const codexModels = [modelOption("gpt-current", { isDefault: true })];
     const claudeModels = [modelOption("fable-5", { providerKey: "claude" })];

@@ -72,6 +72,12 @@ export function buildThreadSettingsMenu(input: {
     option.selection.instanceId === input.selectedModel?.instanceId &&
     option.selection.model === input.selectedModel.model;
 
+  // Leaf picks keep the menu presented (iOS 16+) so several dimensions can be
+  // adjusted in one visit; the native side refreshes the visible menu when the
+  // rebuilt actions arrive, which restores the checkmarks. "All Settings…" is
+  // the exception — it hands off to the sheet, so the menu must close.
+  const keepPresented = { keepsMenuPresented: true } as const;
+
   const modelAction = (option: ModelOption, id: string): MenuAction => {
     events.set(id, { type: "select-model", option });
     return {
@@ -79,6 +85,7 @@ export function buildThreadSettingsMenu(input: {
       title: option.label,
       ...(option.isDefault ? { subtitle: "Default" } : {}),
       state: isSelected(option) ? "on" : "off",
+      attributes: keepPresented,
     };
   };
 
@@ -148,6 +155,7 @@ export function buildThreadSettingsMenu(input: {
         id,
         title: descriptor.label,
         state: descriptor.currentValue ? "on" : "off",
+        attributes: keepPresented,
       });
       continue;
     }
@@ -159,6 +167,7 @@ export function buildThreadSettingsMenu(input: {
         id,
         title: choice.label,
         state: choice.id === currentValue ? "on" : "off",
+        attributes: keepPresented,
       };
     });
     if (choices.length === 0) {
@@ -187,6 +196,7 @@ export function buildThreadSettingsMenu(input: {
         id,
         title: choice.label,
         state: choice.mode === input.runtimeMode ? "on" : "off",
+        attributes: keepPresented,
       };
     }),
   });
