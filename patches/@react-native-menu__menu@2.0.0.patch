@@ -1,17 +1,99 @@
+diff --git a/ios/NewArch/MenuView.mm b/ios/NewArch/MenuView.mm
+index a54e619eb39e3402fa63f2ee4f734063d4f8fc58..066b01259a3c8ad9532688606be3d29a94a8f7d4 100644
+--- a/ios/NewArch/MenuView.mm
++++ b/ios/NewArch/MenuView.mm
+@@ -105,6 +105,27 @@ - (void)onOpenMenu {
+         NSMutableArray<NSDictionary *> *subactionsArray = [NSMutableArray arrayWithCapacity:actions.size()];
+         if (action.subactions.size() > 0) {
+             for (const MenuViewActionsSubactionsStruct &subaction : action.subactions) {
++                NSMutableArray<NSDictionary *> *subSubactionsArray =
++                    [NSMutableArray arrayWithCapacity:subaction.subactions.size()];
++                for (const MenuViewActionsSubactionsSubactionsStruct &subSubaction : subaction.subactions) {
++                    NSDictionary *subSubactionDict = @{
++                        @"id": [NSString stringWithUTF8String:subSubaction.id.c_str()],
++                        @"title": [NSString stringWithUTF8String:subSubaction.title.c_str()],
++                        @"titleColor": @(subSubaction.titleColor),
++                        @"subtitle": [NSString stringWithUTF8String:subSubaction.subtitle.c_str()],
++                        @"state": [NSString stringWithUTF8String:subSubaction.state.c_str()],
++                        @"image": [NSString stringWithUTF8String:subSubaction.image.c_str()],
++                        @"imageColor": @(subSubaction.imageColor),
++                        @"displayInline": @(subSubaction.displayInline),
++                        @"attributes": @{
++                            @"destructive": @(subSubaction.attributes.destructive),
++                            @"disabled": @(subSubaction.attributes.disabled),
++                            @"hidden": @(subSubaction.attributes.hidden),
++                            @"keepsMenuPresented": @(subSubaction.attributes.keepsMenuPresented),
++                        },
++                    };
++                    [subSubactionsArray addObject:subSubactionDict];
++                }
+                 NSDictionary *subactionDict = @{
+                     @"id": [NSString stringWithUTF8String:subaction.id.c_str()],
+                     @"title": [NSString stringWithUTF8String:subaction.title.c_str()],
+@@ -118,7 +139,9 @@ - (void)onOpenMenu {
+                         @"destructive": @(subaction.attributes.destructive),
+                         @"disabled": @(subaction.attributes.disabled),
+                         @"hidden": @(subaction.attributes.hidden),
++                        @"keepsMenuPresented": @(subaction.attributes.keepsMenuPresented),
+                     },
++                    @"subactions": subSubactionsArray,
+                 };
+                 [subactionsArray addObject:subactionDict];
+             }
+@@ -138,6 +161,7 @@ - (void)onOpenMenu {
+                 @"destructive": @(action.attributes.destructive),
+                 @"disabled": @(action.attributes.disabled),
+                 @"hidden": @(action.attributes.hidden),
++                @"keepsMenuPresented": @(action.attributes.keepsMenuPresented),
+             },
+             @"subactions": subactionsArray,
+         };
 diff --git a/ios/Shared/MenuViewImplementation.swift b/ios/Shared/MenuViewImplementation.swift
-index 5c4e0da4292b15d3a27b5ea1555f11452a470815..41795a3e53a33ca0e7c608432737bee13c92be84 100644
+index 5c4e0da4292b15d3a27b5ea1555f11452a470815..12af9a25879be16143bb1af6fd8b776938095d0d 100644
 --- a/ios/Shared/MenuViewImplementation.swift
 +++ b/ios/Shared/MenuViewImplementation.swift
-@@ -87,7 +87,65 @@ public class MenuViewImplementation: UIButton {
+@@ -67,10 +67,25 @@ public class MenuViewImplementation: UIButton {
+         }
+     }
+     
++    public override func contextMenuInteraction(_ interaction: UIContextMenuInteraction, willDisplayMenuFor configuration: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
++        isMenuPresented = true
++    }
++
+     public override func contextMenuInteraction(_ interaction: UIContextMenuInteraction, willEndFor configuration: UIContextMenuConfiguration, animator: UIContextMenuInteractionAnimating?) {
+         sendMenuClose()
++        isMenuPresented = false
++        if pendingMenu != nil {
++            // Re-run the full assignment now that presentation is over, so
++            // any props deferred by the presented-guard (menu contents, press
++            // mode) land on the button.
++            pendingMenu = nil
++            self.setup()
++        }
+     }
+ 
++    private var isMenuPresented = false
++    private var pendingMenu: UIMenu?
++
+     func setup () {
+         let menu = UIMenu(title: _title,
+             identifier: nil,
+@@ -86,8 +101,71 @@ public class MenuViewImplementation: UIButton {
+             }
          }
  
++        if isMenuPresented {
++            // An action fired with keepsMenuPresented leaves the menu on
++            // screen, and reassigning self.menu while it is presented makes
++            // UIKit dismiss it — the update triggered by a selection would
++            // defeat the keep-presented attribute. Update the visible copy in
++            // place instead and defer the button assignment to dismissal.
++            pendingMenu = menu
++            self.refreshPresentedMenu(menu)
++            return
++        }
++
          self.menu = menu
-+        // An action fired with keepsMenuPresented leaves the menu on screen,
-+        // but the presented copy is a snapshot: replacing self.menu alone
-+        // never repaints it. Push the rebuilt tree into whichever interaction
-+        // is showing it so checkmarks and subtitles track the new JS state
-+        // (no-op while nothing is presented).
-+        self.refreshPresentedMenu(menu)
          self.showsMenuAsPrimaryAction = !shouldOpenOnLongPress
 +        // In long-press mode the button must not intercept touches: as a
 +        // full-bounds contentView it sits IN FRONT of the React children of
@@ -92,3 +174,50 @@ index bb6bb2b7ad56135089f267587c974b166760539d..43e96f209480c3b076786cd1772f1291
              }
  
              if #available(iOS 16.0, *) {
+diff --git a/src/NativeModuleSpecs/UIMenuNativeComponent.ts b/src/NativeModuleSpecs/UIMenuNativeComponent.ts
+index e6509355275596c451f9d082223cc16bfe504e1a..c783cdaf73f5635cf9835824ca85fba3b46453b4 100644
+--- a/src/NativeModuleSpecs/UIMenuNativeComponent.ts
++++ b/src/NativeModuleSpecs/UIMenuNativeComponent.ts
+@@ -13,6 +13,22 @@ import codegenNativeComponent from "react-native/Libraries/Utilities/codegenNati
+   types here, to avoid issues while `pod install` takes place.
+ */
+ 
++type SubSubAction = {
++	id?: string;
++	title: string;
++	titleColor?: Int32;
++	subtitle?: string;
++	state?: string;
++	image?: string;
++	imageColor?: Int32;
++	displayInline?: boolean;
++	attributes?: {
++		destructive?: boolean;
++		disabled?: boolean;
++		hidden?: boolean;
++		keepsMenuPresented?: boolean;
++	};
++};
+ type SubAction = {
+ 	id?: string;
+ 	title: string;
+@@ -26,7 +42,11 @@ type SubAction = {
+ 		destructive?: boolean;
+ 		disabled?: boolean;
+ 		hidden?: boolean;
++		keepsMenuPresented?: boolean;
+ 	};
++	// One extra nesting level (menu → submenu → nested submenu leaves); the
++	// codegen structs can't recurse, so depth is capped explicitly.
++	subactions?: Array<SubSubAction>;
+ };
+ type MenuAction = {
+ 	id?: string;
+@@ -41,6 +61,7 @@ type MenuAction = {
+ 		destructive?: boolean;
+ 		disabled?: boolean;
+ 		hidden?: boolean;
++		keepsMenuPresented?: boolean;
+ 	};
+ 	subactions?: Array<SubAction>;
+ };
