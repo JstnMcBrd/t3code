@@ -27,7 +27,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { Platform, useWindowDimensions, View, type GestureResponderEvent } from "react-native";
+import { isLiquidGlassSupported, LiquidGlassView } from "@callstack/liquid-glass";
+import {
+  Platform,
+  useColorScheme,
+  useWindowDimensions,
+  View,
+  type GestureResponderEvent,
+} from "react-native";
 import {
   KeyboardController,
   KeyboardStickyView,
@@ -349,6 +356,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   }, [freeze, scrollMessageToEnd]);
 
   const showScrollToEndButton = contentPresentationKind === "ready" && !endFollowEnabled;
+  const isDarkMode = useColorScheme() === "dark";
 
   const handleFeedTouchStart = useCallback((event: GestureResponderEvent) => {
     feedTouchStartRef.current = {
@@ -436,17 +444,34 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
             {showScrollToEndButton ? (
               <Animated.View
                 pointerEvents="box-none"
-                className="absolute -top-14 left-0 right-0 z-20 items-center"
+                className="absolute -top-11 left-0 right-0 z-20 items-center"
                 entering={FadeInDown.duration(160)}
                 exiting={FadeOut.duration(100)}
               >
-                <ControlPill
-                  accessibilityLabel="Scroll to end"
-                  activateOnPressIn
-                  className="h-9 w-9 border border-border bg-card shadow-md shadow-black/10"
-                  icon={{ ios: "chevron.down", android: "keyboard_arrow_down" }}
-                  onPress={handleScrollToEnd}
-                />
+                {isLiquidGlassSupported ? (
+                  <LiquidGlassView
+                    colorScheme={isDarkMode ? "dark" : "light"}
+                    effect="regular"
+                    interactive
+                    style={{ borderRadius: 18, height: 36, overflow: "hidden", width: 36 }}
+                  >
+                    <ControlPill
+                      accessibilityLabel="Scroll to end"
+                      activateOnPressIn
+                      className="h-9 w-9 bg-transparent"
+                      icon={{ ios: "chevron.down", android: "keyboard_arrow_down" }}
+                      onPress={handleScrollToEnd}
+                    />
+                  </LiquidGlassView>
+                ) : (
+                  <ControlPill
+                    accessibilityLabel="Scroll to end"
+                    activateOnPressIn
+                    className="h-9 w-9 border border-border bg-card shadow-md shadow-black/10"
+                    icon={{ ios: "chevron.down", android: "keyboard_arrow_down" }}
+                    onPress={handleScrollToEnd}
+                  />
+                )}
               </Animated.View>
             ) : null}
             <View className="w-full self-center" style={{ maxWidth: contentMaxWidth }}>
