@@ -279,7 +279,6 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     editorRef: inputRef,
     isEditorFocused: isFocused,
   });
-  const openSettingsSheet = settingsSheetPresentation.open;
   const wasExpandedBeforePreviewRef = useRef(false);
   const inFlightThreadIdsRef = useRef(new Set<string>());
   const { onExpandedChange } = props;
@@ -673,16 +672,12 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
           void Haptics.selectionAsync();
           onUpdateRuntimeMode(event.mode);
           return;
-        case "open-settings":
-          openSettingsSheet();
-          return;
       }
     },
     [
       currentModelSelection,
       onUpdateModelSelection,
       onUpdateRuntimeMode,
-      openSettingsSheet,
       providerOptionDescriptors,
       settingsMenu,
     ],

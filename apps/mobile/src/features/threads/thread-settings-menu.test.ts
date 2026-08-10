@@ -85,7 +85,7 @@ function eventFor(menu: ReturnType<typeof buildThreadSettingsMenu>, id: string |
 }
 
 describe("buildThreadSettingsMenu", () => {
-  it("orders the top level as model, options, runtime, settings escape hatch", () => {
+  it("orders the top level as model, options, runtime", () => {
     const menu = buildThreadSettingsMenu(baseInput());
 
     expect(menu.actions.map((action) => action.title)).toEqual([
@@ -93,14 +93,7 @@ describe("buildThreadSettingsMenu", () => {
       "Reasoning",
       "Fast mode",
       "Runtime",
-      "",
     ]);
-    const settingsSection = menu.actions.at(-1);
-    expect(settingsSection?.displayInline).toBe(true);
-    expect(settingsSection?.subactions?.map((action) => action.title)).toEqual(["All Settings…"]);
-    expect(eventFor(menu, settingsSection?.subactions?.[0]?.id)).toEqual({
-      type: "open-settings",
-    });
   });
 
   it("summarizes the current choice on each submenu row", () => {
@@ -240,9 +233,6 @@ describe("buildThreadSettingsMenu", () => {
     expect(nestedPicks.every((action) => action.attributes?.keepsMenuPresented === expected)).toBe(
       true,
     );
-
-    // The sheet hand-off must dismiss the menu before presenting.
-    expect(menu.actions.at(-1)?.subactions?.[0]?.attributes).toBeUndefined();
   });
 
   it("sections models by provider only when multiple groups are offered", () => {
@@ -291,8 +281,6 @@ describe("buildThreadSettingsMenu", () => {
     for (const id of leafIds) {
       expect(menu.events.get(id), `missing event for ${id}`).toBeDefined();
     }
-    expect(eventTypes(menu)).toEqual(
-      new Set(["select-model", "set-option", "set-runtime", "open-settings"]),
-    );
+    expect(eventTypes(menu)).toEqual(new Set(["select-model", "set-option", "set-runtime"]));
   });
 });

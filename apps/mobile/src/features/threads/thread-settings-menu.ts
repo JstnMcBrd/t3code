@@ -49,8 +49,7 @@ export const NESTED_PICKS_KEEP_MENU_PRESENTED = true;
 export type ThreadSettingsMenuEvent =
   | { readonly type: "select-model"; readonly option: ModelOption }
   | { readonly type: "set-option"; readonly optionId: string; readonly value: string | boolean }
-  | { readonly type: "set-runtime"; readonly mode: RuntimeMode }
-  | { readonly type: "open-settings" };
+  | { readonly type: "set-runtime"; readonly mode: RuntimeMode };
 
 export type ThreadSettingsMenu = {
   readonly actions: MenuAction[];
@@ -59,15 +58,15 @@ export type ThreadSettingsMenu = {
 };
 
 /**
- * Native menu equivalent of the thread settings sheet for the everyday
- * adjustments (model, select/boolean provider options, runtime mode). The
- * menu presents from the composer pill without resigning the keyboard, so the
- * common flow never bounces focus; "All Settings…" falls back to the sheet
- * for anything richer.
+ * Native menu replacement for the thread settings sheet (model, select and
+ * boolean provider options, runtime mode). The menu presents from the
+ * composer pill without resigning the keyboard, so adjusting settings never
+ * bounces focus. A thread is bound to one harness, so the menu covers the
+ * sheet's full surface for existing threads; the sheet remains the Android
+ * and new-task-draft surface.
  *
  * Selections apply immediately — the sheet's stage-then-Save flow only exists
- * because the sheet batches a model change with its option edits, and a menu
- * closes after each pick anyway.
+ * because the sheet batches a model change with its option edits.
  */
 export function buildThreadSettingsMenu(input: {
   readonly providerGroups: ReadonlyArray<ProviderGroup>;
@@ -211,15 +210,6 @@ export function buildThreadSettingsMenu(input: {
         ...nestedPickAttributes,
       };
     }),
-  });
-
-  events.set("open-settings", { type: "open-settings" });
-  actions.push({
-    // Inline single-item section renders the system divider above the row.
-    id: "settings-section",
-    title: "",
-    displayInline: true,
-    subactions: [{ id: "open-settings", title: "All Settings…", image: "slider.horizontal.3" }],
   });
 
   return { actions, events };
