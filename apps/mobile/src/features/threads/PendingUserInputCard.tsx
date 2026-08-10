@@ -1,8 +1,10 @@
 import type { ApprovalRequestId, UserInputQuestion } from "@t3tools/contracts";
 import { Pressable, ScrollView, View } from "react-native";
 
+import { SymbolView } from "../../components/AppSymbol";
 import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
 import { cn } from "../../lib/cn";
+import { useThemeColor } from "../../lib/useThemeColor";
 import {
   isPendingUserInputOptionSelected,
   type PendingUserInput,
@@ -12,6 +14,8 @@ import {
 export interface PendingUserInputCardProps {
   readonly pendingUserInput: PendingUserInput;
   readonly maxHeight: number;
+  readonly collapsed: boolean;
+  readonly onToggleCollapsed: () => void;
   readonly drafts: Record<string, PendingUserInputDraftAnswer>;
   readonly answers: Record<string, string | ReadonlyArray<string>> | null;
   readonly respondingUserInputId: ApprovalRequestId | null;
@@ -29,6 +33,30 @@ export interface PendingUserInputCardProps {
 }
 
 export function PendingUserInputCard(props: PendingUserInputCardProps) {
+  const iconSubtle = useThemeColor("--color-icon-subtle");
+  const questionCount = props.pendingUserInput.questions.length;
+
+  if (props.collapsed) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Expand user input, ${questionCount} question${
+          questionCount === 1 ? "" : "s"
+        }`}
+        onPress={props.onToggleCollapsed}
+        className="flex-row items-center gap-2 self-center rounded-full border border-neutral-200 bg-neutral-100 py-2.5 pl-4 pr-3 active:opacity-70 dark:border-white/6 dark:bg-neutral-900"
+      >
+        <Text className="font-t3-bold text-2xs uppercase tracking-[1.1px] text-sky-700 dark:text-sky-300">
+          User input needed
+        </Text>
+        <Text className="font-sans text-xs text-neutral-500 dark:text-neutral-400">
+          {questionCount} question{questionCount === 1 ? "" : "s"}
+        </Text>
+        <SymbolView name="chevron.up" size={12} tintColor={iconSubtle} type="monochrome" />
+      </Pressable>
+    );
+  }
+
   // The surface is opaque on purpose: the card floats over the thread feed
   // with no blur behind it, so a translucent background renders the questions
   // on top of whatever message happens to sit underneath.
@@ -37,12 +65,24 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
       className="overflow-hidden gap-2.5 rounded-[20px] border border-neutral-200 bg-neutral-100 p-4 dark:border-white/6 dark:bg-neutral-900"
       style={{ maxHeight: props.maxHeight }}
     >
-      <Text className="font-t3-bold text-2xs uppercase tracking-[1.1px] text-sky-700 dark:text-sky-300">
-        User input needed
-      </Text>
-      <Text className="font-t3-bold text-lg text-neutral-950 dark:text-neutral-50">
-        Fill in the pending answers
-      </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Collapse user input"
+        onPress={props.onToggleCollapsed}
+        className="flex-row items-start gap-2"
+      >
+        <View className="flex-1 gap-2.5">
+          <Text className="font-t3-bold text-2xs uppercase tracking-[1.1px] text-sky-700 dark:text-sky-300">
+            User input needed
+          </Text>
+          <Text className="font-t3-bold text-lg text-neutral-950 dark:text-neutral-50">
+            Fill in the pending answers
+          </Text>
+        </View>
+        <View className="h-8 w-8 items-center justify-center rounded-full bg-neutral-200/70 dark:bg-white/8">
+          <SymbolView name="chevron.down" size={13} tintColor={iconSubtle} type="monochrome" />
+        </View>
+      </Pressable>
       <ScrollView
         bounces={false}
         className="min-h-0"

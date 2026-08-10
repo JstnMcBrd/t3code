@@ -29,6 +29,7 @@ import {
 } from "react";
 import { isLiquidGlassSupported, LiquidGlassView } from "@callstack/liquid-glass";
 import {
+  Keyboard,
   Platform,
   useColorScheme,
   useWindowDimensions,
@@ -233,11 +234,35 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   const selectedThreadFeed = props.selectedThreadFeed;
   const composerChrome = composerExpanded ? COMPOSER_EXPANDED_CHROME : COMPOSER_COLLAPSED_CHROME;
   const composerOverlapHeight = composerChrome + composerBottomInset;
+  // While the questionnaire is expanded it IS the input surface and the
+  // composer hides; collapsing it (keyed by request id, so a new request
+  // re-expands automatically) brings the composer back for free-text
+  // steering or stopping the turn.
+  const [collapsedUserInputRequestId, setCollapsedUserInputRequestId] =
+    useState<ApprovalRequestId | null>(null);
+  const activeUserInputRequestId = props.activePendingUserInput?.requestId ?? null;
+  const userInputCollapsed =
+    activeUserInputRequestId !== null && collapsedUserInputRequestId === activeUserInputRequestId;
+  const userInputExpanded = activeUserInputRequestId !== null && !userInputCollapsed;
+  const handleToggleUserInputCollapsed = useCallback(() => {
+    if (activeUserInputRequestId === null) {
+      return;
+    }
+    if (userInputCollapsed) {
+      setCollapsedUserInputRequestId(null);
+    } else {
+      // Collapsing hides the custom-answer inputs; release the keyboard with
+      // them instead of leaving it up over a dead responder.
+      Keyboard.dismiss();
+      setCollapsedUserInputRequestId(activeUserInputRequestId);
+    }
+  }, [activeUserInputRequestId, userInputCollapsed]);
   const pendingUserInputMaxHeight = derivePendingUserInputMaxHeight({
     windowHeight,
     keyboardHeight: isKeyboardVisible ? keyboardHeight : 0,
     navigationHeaderHeight,
-    composerOverlapHeight,
+    // With the composer hidden, only its bottom inset still overlaps.
+    composerOverlapHeight: userInputExpanded ? composerBottomInset : composerOverlapHeight,
   });
   const estimatedOverlayHeight = composerOverlapHeight;
   // The overlay's measured height includes the home-indicator inset (the
@@ -488,6 +513,9 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
               {props.activePendingApproval || props.activePendingUserInput ? (
                 <Animated.View
                   className="shrink-0 gap-3 px-4 pb-3"
+                  // The expanded questionnaire replaces the composer, so it
+                  // must pad the home indicator the composer normally covers.
+                  style={userInputExpanded ? { paddingBottom: composerBottomInset } : undefined}
                   entering={FadeInDown.duration(220)}
                   exiting={FadeOut.duration(140)}
                 >
@@ -502,6 +530,8 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                     <PendingUserInputCard
                       pendingUserInput={props.activePendingUserInput}
                       maxHeight={pendingUserInputMaxHeight}
+                      collapsed={userInputCollapsed}
+                      onToggleCollapsed={handleToggleUserInputCollapsed}
                       drafts={props.activePendingUserInputDrafts}
                       answers={props.activePendingUserInputAnswers}
                       respondingUserInputId={props.respondingUserInputId}
@@ -514,35 +544,39 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
               ) : null}
             </View>
 
-            <ThreadComposer
-              editorRef={composerEditorRef}
-              draftMessage={props.draftMessage}
-              draftAttachments={props.draftAttachments}
-              placeholder="Ask the repo agent, or run a command…"
-              contentMaxWidth={contentMaxWidth}
-              connectionState={props.connectionStateLabel}
-              connectionError={props.connectionError}
-              environmentLabel={props.environmentLabel}
-              threadSyncPhase={threadSyncPhase}
-              selectedThread={props.selectedThread}
-              serverConfig={props.serverConfig}
-              queueCount={props.selectedThreadQueueCount}
-              activeThreadBusy={props.activeThreadBusy}
-              environmentId={props.environmentId}
-              projectCwd={props.projectWorkspaceRoot}
-              bottomInset={composerBottomInset}
-              onChangeDraftMessage={props.onChangeDraftMessage}
-              onPickDraftImages={props.onPickDraftImages}
-              onNativePasteImages={props.onNativePasteImages}
-              onRemoveDraftImage={props.onRemoveDraftImage}
-              onStopThread={props.onStopThread}
-              onSendMessage={handleSendMessage}
-              onReconnectEnvironment={props.onReconnectEnvironment}
-              onUpdateModelSelection={props.onUpdateThreadModelSelection}
-              onUpdateRuntimeMode={props.onUpdateThreadRuntimeMode}
-              onUpdateInteractionMode={props.onUpdateThreadInteractionMode}
-              onExpandedChange={setComposerExpanded}
-            />
+            {/* Hidden (not unmounted) while the questionnaire owns the input
+                surface, so composer drafts and editor state survive. */}
+            <View style={userInputExpanded ? { display: "none" } : undefined}>
+              <ThreadComposer
+                editorRef={composerEditorRef}
+                draftMessage={props.draftMessage}
+                draftAttachments={props.draftAttachments}
+                placeholder="Ask the repo agent, or run a command…"
+                contentMaxWidth={contentMaxWidth}
+                connectionState={props.connectionStateLabel}
+                connectionError={props.connectionError}
+                environmentLabel={props.environmentLabel}
+                threadSyncPhase={threadSyncPhase}
+                selectedThread={props.selectedThread}
+                serverConfig={props.serverConfig}
+                queueCount={props.selectedThreadQueueCount}
+                activeThreadBusy={props.activeThreadBusy}
+                environmentId={props.environmentId}
+                projectCwd={props.projectWorkspaceRoot}
+                bottomInset={composerBottomInset}
+                onChangeDraftMessage={props.onChangeDraftMessage}
+                onPickDraftImages={props.onPickDraftImages}
+                onNativePasteImages={props.onNativePasteImages}
+                onRemoveDraftImage={props.onRemoveDraftImage}
+                onStopThread={props.onStopThread}
+                onSendMessage={handleSendMessage}
+                onReconnectEnvironment={props.onReconnectEnvironment}
+                onUpdateModelSelection={props.onUpdateThreadModelSelection}
+                onUpdateRuntimeMode={props.onUpdateThreadRuntimeMode}
+                onUpdateInteractionMode={props.onUpdateThreadInteractionMode}
+                onExpandedChange={setComposerExpanded}
+              />
+            </View>
           </View>
         </KeyboardStickyView>
       ) : null}
