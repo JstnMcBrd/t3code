@@ -1,6 +1,6 @@
 import type { ApprovalRequestId, UserInputQuestion } from "@t3tools/contracts";
 import { Pressable, ScrollView, View } from "react-native";
-import Animated, { FadeIn, FadeInUp, FadeOut, LinearTransition } from "react-native-reanimated";
+import Animated, { FadeInUp, FadeOutDown, LinearTransition } from "react-native-reanimated";
 
 import { SymbolView } from "../../components/AppSymbol";
 import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
@@ -42,9 +42,11 @@ export interface PendingUserInputCardProps {
 }
 
 /**
- * The bar and the card swap via keyed remounts with enter/exit animations —
- * frame-morphing one view between shapes this different strands it mid-flight
- * detached from the bottom slot.
+ * The collapsed bar is the PERMANENT in-flow footprint — the expanded card is
+ * an absolutely-positioned overlay rising above it. The overlay's measured
+ * height (which drives the thread feed's bottom inset) therefore never
+ * changes on collapse/expand, so the transcript stays perfectly still while
+ * the card animates over it.
  */
 const CARD_LAYOUT_TRANSITION = LinearTransition.duration(200);
 
@@ -52,12 +54,12 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
   const iconSubtle = useThemeColor("--color-icon-subtle");
   const questionCount = props.pendingUserInput.questions.length;
 
-  if (props.collapsed) {
-    return (
-      <Animated.View
-        key="pending-user-input-bar"
-        entering={FadeIn.duration(180)}
-        exiting={FadeOut.duration(120)}
+  return (
+    <View className="relative">
+      <View
+        pointerEvents={props.collapsed ? "auto" : "none"}
+        accessibilityElementsHidden={!props.collapsed}
+        importantForAccessibility={props.collapsed ? "auto" : "no-hide-descendants"}
         className="flex-row items-center gap-2 rounded-full border border-neutral-200 bg-neutral-100 py-1.5 pl-4 pr-1.5 dark:border-white/6 dark:bg-neutral-900"
       >
         <Pressable
@@ -86,119 +88,120 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
             onPress={props.onStopThread}
           />
         ) : null}
-      </Animated.View>
-    );
-  }
-
-  // The surface is opaque on purpose: the card floats over the thread feed
-  // with no blur behind it, so a translucent background renders the questions
-  // on top of whatever message happens to sit underneath.
-  return (
-    <Animated.View
-      key="pending-user-input-card"
-      entering={FadeInUp.duration(220)}
-      // Kept short: the ghost overlays the transcript while the feed inset
-      // snaps to the bar height underneath it.
-      exiting={FadeOut.duration(90)}
-      layout={CARD_LAYOUT_TRANSITION}
-      className="overflow-hidden gap-2.5 rounded-[20px] border border-neutral-200 bg-neutral-100 p-4 dark:border-white/6 dark:bg-neutral-900"
-      style={{ maxHeight: props.maxHeight }}
-    >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Collapse user input"
-        onPress={props.onToggleCollapsed}
-        className="flex-row items-start gap-2"
-      >
-        <View className="flex-1 gap-2.5">
-          <Text className="font-t3-bold text-2xs uppercase tracking-[1.1px] text-sky-700 dark:text-sky-300">
-            User input needed
-          </Text>
-          <Text className="font-t3-bold text-lg text-neutral-950 dark:text-neutral-50">
-            Fill in the pending answers
-          </Text>
-        </View>
-        <View className="h-8 w-8 items-center justify-center rounded-full bg-neutral-200/70 dark:bg-white/8">
-          <SymbolView name="chevron.down" size={13} tintColor={iconSubtle} type="monochrome" />
-        </View>
-      </Pressable>
-      <ScrollView
-        bounces={false}
-        className="min-h-0"
-        contentContainerClassName="gap-2.5 pb-1"
-        keyboardShouldPersistTaps="handled"
-        nestedScrollEnabled
-        showsVerticalScrollIndicator
-        style={{ flexShrink: 1 }}
-      >
-        {props.pendingUserInput.questions.map((question) => {
-          const draft = props.drafts[question.id];
-          return (
-            <View key={question.id} className="gap-2 pt-1">
-              <Text className="font-t3-bold text-xs uppercase tracking-[1px] text-neutral-500 dark:text-neutral-500">
-                {question.header}
+      </View>
+      {props.collapsed ? null : (
+        // The surface is opaque on purpose: the card floats over the thread
+        // feed with no blur behind it, so a translucent background renders
+        // the questions on top of whatever message happens to sit underneath.
+        <Animated.View
+          entering={FadeInUp.duration(220)}
+          exiting={FadeOutDown.duration(160)}
+          layout={CARD_LAYOUT_TRANSITION}
+          className="absolute inset-x-0 bottom-0 overflow-hidden gap-2.5 rounded-[20px] border border-neutral-200 bg-neutral-100 p-4 dark:border-white/6 dark:bg-neutral-900"
+          style={{ maxHeight: props.maxHeight }}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Collapse user input"
+            onPress={props.onToggleCollapsed}
+            className="flex-row items-start gap-2"
+          >
+            <View className="flex-1 gap-2.5">
+              <Text className="font-t3-bold text-2xs uppercase tracking-[1.1px] text-sky-700 dark:text-sky-300">
+                User input needed
               </Text>
-              <Text className="font-sans text-base leading-snug text-neutral-950 dark:text-neutral-50">
-                {question.question}
+              <Text className="font-t3-bold text-lg text-neutral-950 dark:text-neutral-50">
+                Fill in the pending answers
               </Text>
-              <View className="flex-row flex-wrap gap-2.5">
-                {question.options.map((option) => {
-                  const selected = isPendingUserInputOptionSelected(draft, option.label);
-                  return (
-                    <Pressable
-                      key={option.label}
-                      className={cn(
-                        "rounded-full border px-3 py-2.5 ",
-                        selected
-                          ? "border-blue-300/50 bg-blue-50 dark:border-blue-400/28 dark:bg-blue-400/14"
-                          : "border-neutral-200 bg-white dark:border-white/6 dark:bg-neutral-950/70",
-                      )}
-                      onPress={() =>
-                        props.onSelectOption(
-                          props.pendingUserInput.requestId,
-                          question,
-                          option.label,
-                        )
-                      }
-                    >
-                      <Text
-                        className={cn(
-                          "font-t3-bold text-sm",
-                          selected
-                            ? "text-sky-700 dark:text-sky-300"
-                            : "text-neutral-600 dark:text-neutral-300",
-                        )}
-                      >
-                        {option.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              <TextInput
-                value={draft?.customAnswer ?? ""}
-                onChangeText={(value) =>
-                  props.onChangeCustomAnswer(props.pendingUserInput.requestId, question.id, value)
-                }
-                placeholder="Or type a custom answer"
-                className="min-h-[54px] rounded-2xl border border-neutral-200 bg-white px-3.5 py-3 font-sans text-base text-neutral-950 dark:border-white/8 dark:bg-neutral-950/70 dark:text-neutral-50"
-              />
             </View>
-          );
-        })}
-      </ScrollView>
-      <Pressable
-        className={cn(
-          "items-center justify-center rounded-2xl px-4 py-3.5",
-          props.answers ? "bg-blue-500" : "bg-neutral-200 dark:bg-neutral-700/60",
-        )}
-        disabled={
-          props.answers === null || props.respondingUserInputId === props.pendingUserInput.requestId
-        }
-        onPress={() => void props.onSubmit()}
-      >
-        <Text className="font-t3-extrabold text-sm text-white">Submit answers</Text>
-      </Pressable>
-    </Animated.View>
+            <View className="h-8 w-8 items-center justify-center rounded-full bg-neutral-200/70 dark:bg-white/8">
+              <SymbolView name="chevron.down" size={13} tintColor={iconSubtle} type="monochrome" />
+            </View>
+          </Pressable>
+          <ScrollView
+            bounces={false}
+            className="min-h-0"
+            contentContainerClassName="gap-2.5 pb-1"
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+            style={{ flexShrink: 1 }}
+          >
+            {props.pendingUserInput.questions.map((question) => {
+              const draft = props.drafts[question.id];
+              return (
+                <View key={question.id} className="gap-2 pt-1">
+                  <Text className="font-t3-bold text-xs uppercase tracking-[1px] text-neutral-500 dark:text-neutral-500">
+                    {question.header}
+                  </Text>
+                  <Text className="font-sans text-base leading-snug text-neutral-950 dark:text-neutral-50">
+                    {question.question}
+                  </Text>
+                  <View className="flex-row flex-wrap gap-2.5">
+                    {question.options.map((option) => {
+                      const selected = isPendingUserInputOptionSelected(draft, option.label);
+                      return (
+                        <Pressable
+                          key={option.label}
+                          className={cn(
+                            "rounded-full border px-3 py-2.5 ",
+                            selected
+                              ? "border-blue-300/50 bg-blue-50 dark:border-blue-400/28 dark:bg-blue-400/14"
+                              : "border-neutral-200 bg-white dark:border-white/6 dark:bg-neutral-950/70",
+                          )}
+                          onPress={() =>
+                            props.onSelectOption(
+                              props.pendingUserInput.requestId,
+                              question,
+                              option.label,
+                            )
+                          }
+                        >
+                          <Text
+                            className={cn(
+                              "font-t3-bold text-sm",
+                              selected
+                                ? "text-sky-700 dark:text-sky-300"
+                                : "text-neutral-600 dark:text-neutral-300",
+                            )}
+                          >
+                            {option.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <TextInput
+                    value={draft?.customAnswer ?? ""}
+                    onChangeText={(value) =>
+                      props.onChangeCustomAnswer(
+                        props.pendingUserInput.requestId,
+                        question.id,
+                        value,
+                      )
+                    }
+                    placeholder="Or type a custom answer"
+                    className="min-h-[54px] rounded-2xl border border-neutral-200 bg-white px-3.5 py-3 font-sans text-base text-neutral-950 dark:border-white/8 dark:bg-neutral-950/70 dark:text-neutral-50"
+                  />
+                </View>
+              );
+            })}
+          </ScrollView>
+          <Pressable
+            className={cn(
+              "items-center justify-center rounded-2xl px-4 py-3.5",
+              props.answers ? "bg-blue-500" : "bg-neutral-200 dark:bg-neutral-700/60",
+            )}
+            disabled={
+              props.answers === null ||
+              props.respondingUserInputId === props.pendingUserInput.requestId
+            }
+            onPress={() => void props.onSubmit()}
+          >
+            <Text className="font-t3-extrabold text-sm text-white">Submit answers</Text>
+          </Pressable>
+        </Animated.View>
+      )}
+    </View>
   );
 }
