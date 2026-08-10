@@ -213,23 +213,25 @@ describe("buildThreadSettingsMenu", () => {
     });
   });
 
-  it("keeps the menu presented for picks but not for the settings hand-off", () => {
+  it("keeps the menu presented only for top-level toggles", () => {
     const menu = buildThreadSettingsMenu(baseInput());
 
-    const modelItems = menu.actions.find((action) => action.title === "Model")?.subactions ?? [];
-    expect(
-      modelItems.find((action) => action.title === "gpt-next")?.attributes?.keepsMenuPresented,
-    ).toBe(true);
+    // Root-level boolean toggles refresh in place with clean chrome.
     expect(
       menu.actions.find((action) => action.title === "Fast mode")?.attributes?.keepsMenuPresented,
     ).toBe(true);
+
+    // Picks inside nested submenus close the menu: iOS keeps the *submenu*
+    // presented otherwise, rendering an expanded-submenu header with no way
+    // to pop back to the root.
+    const modelItems = menu.actions.find((action) => action.title === "Model")?.subactions ?? [];
     const reasoningItems =
       menu.actions.find((action) => action.title === "Reasoning")?.subactions ?? [];
     const runtimeItems =
       menu.actions.find((action) => action.title === "Runtime")?.subactions ?? [];
     expect(
-      [...reasoningItems, ...runtimeItems].every(
-        (action) => action.attributes?.keepsMenuPresented === true,
+      [...modelItems, ...reasoningItems, ...runtimeItems].every(
+        (action) => action.attributes?.keepsMenuPresented === undefined,
       ),
     ).toBe(true);
 
