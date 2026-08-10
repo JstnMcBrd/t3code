@@ -140,7 +140,7 @@ index 919b984edc9f91ee9ac26faf257d8a721e26457c..5bb0cd6736ed6bc51db57e2a9326f758
  
  NS_ASSUME_NONNULL_END
 diff --git a/ios/RNSScreenStackHeaderConfig.mm b/ios/RNSScreenStackHeaderConfig.mm
-index 5970e3e3a624b9498b8dedfc16831df03a274d0c..c78fdee16af3c1a0e060f167eab05ce930d9fd7f 100644
+index 5970e3e3a624b9498b8dedfc16831df03a274d0c..22efda48804f27b6f511cd7461c9dd92d42ed9d9 100644
 --- a/ios/RNSScreenStackHeaderConfig.mm
 +++ b/ios/RNSScreenStackHeaderConfig.mm
 @@ -25,11 +25,33 @@
@@ -226,7 +226,7 @@ index 5970e3e3a624b9498b8dedfc16831df03a274d0c..c78fdee16af3c1a0e060f167eab05ce9
  
  // appearance does not apply to the tvOS so we need to use lagacy customization
  #if TARGET_OS_TV
-@@ -637,10 +675,322 @@ + (void)updateViewController:(UIViewController *)vc
+@@ -637,10 +675,356 @@ + (void)updateViewController:(UIViewController *)vc
    // This assignment should be done after `navitem.titleView = ...` assignment (iOS 16.0 bug).
    // See: https://github.com/software-mansion/react-native-screens/issues/1570 (comments)
    navitem.title = config.title;
@@ -344,19 +344,17 @@ index 5970e3e3a624b9498b8dedfc16831df03a274d0c..c78fdee16af3c1a0e060f167eab05ce9
 +      toolbarHost.tag = RNSMailSearchToolbarViewTag;
 +      toolbarHost.translatesAutoresizingMaskIntoConstraints = NO;
 +      [chromeHostView addSubview:toolbarHost];
-+      // Keyboard avoidance is best-effort: on the iOS 27 beta the keyboard
-+      // layout guide no longer rests at the bottom safe-area edge while the
-+      // keyboard is hidden, which pushed the toolbar offscreen. The required
-+      // resting position is the safe area; the keyboard guide only pulls the
-+      // toolbar up when it actually tracks a visible keyboard.
++      // The screen stays mounted beneath pushed routes, so its keyboard layout
++      // guide can track a keyboard owned by another screen. Keep the toolbar at
++      // rest unless its own search field is editing.
 +      NSLayoutConstraint *keyboardAvoidConstraint =
 +          [toolbarHost.bottomAnchor constraintEqualToAnchor:keyboardLayoutGuide.topAnchor
 +                                                   constant:-toolbarBottomSpacing];
-+      keyboardAvoidConstraint.priority = UILayoutPriorityDefaultHigh;
++      keyboardAvoidConstraint.priority = UILayoutPriorityDefaultLow;
 +      NSLayoutConstraint *restingBottomConstraint =
 +          [toolbarHost.bottomAnchor constraintEqualToAnchor:chromeHostView.safeAreaLayoutGuide.bottomAnchor
 +                                                   constant:-toolbarBottomSpacing];
-+      restingBottomConstraint.priority = UILayoutPriorityDefaultLow;
++      restingBottomConstraint.priority = UILayoutPriorityDefaultHigh;
 +      [NSLayoutConstraint activateConstraints:@[
 +        [toolbarHost.centerXAnchor constraintEqualToAnchor:chromeHostView.centerXAnchor],
 +        [toolbarHost.bottomAnchor constraintLessThanOrEqualToAnchor:chromeHostView.safeAreaLayoutGuide.bottomAnchor
@@ -367,6 +365,40 @@ index 5970e3e3a624b9498b8dedfc16831df03a274d0c..c78fdee16af3c1a0e060f167eab05ce9
 +        [toolbarHost.heightAnchor constraintEqualToConstant:toolbarHeight],
 +      ]];
 +      [chromeHostView bringSubviewToFront:toolbarHost];
++
++      void (^configureKeyboardTracking)(UITextField *) = ^(UITextField *textField) {
++        BOOL isEditing = textField.isFirstResponder;
++        keyboardAvoidConstraint.priority =
++            isEditing ? UILayoutPriorityDefaultHigh : UILayoutPriorityDefaultLow;
++        restingBottomConstraint.priority =
++            isEditing ? UILayoutPriorityDefaultLow : UILayoutPriorityDefaultHigh;
++
++        __weak NSLayoutConstraint *weakKeyboardAvoidConstraint = keyboardAvoidConstraint;
++        __weak NSLayoutConstraint *weakRestingBottomConstraint = restingBottomConstraint;
++        __weak UIView *weakChromeHostView = chromeHostView;
++        NSString *beginActionIdentifier = @"org.react-native-screens.mail-search-toolbar.keyboard-begin";
++        NSString *endActionIdentifier = @"org.react-native-screens.mail-search-toolbar.keyboard-end";
++        [textField removeActionForIdentifier:beginActionIdentifier forControlEvents:UIControlEventEditingDidBegin];
++        [textField removeActionForIdentifier:endActionIdentifier forControlEvents:UIControlEventEditingDidEnd];
++        [textField addAction:[UIAction actionWithTitle:@""
++                                                image:nil
++                                           identifier:beginActionIdentifier
++                                              handler:^(__kindof UIAction *_Nonnull action) {
++                                                     weakRestingBottomConstraint.priority = UILayoutPriorityDefaultLow;
++                                                     weakKeyboardAvoidConstraint.priority = UILayoutPriorityDefaultHigh;
++                                                     [weakChromeHostView setNeedsLayout];
++                                                   }]
++            forControlEvents:UIControlEventEditingDidBegin];
++        [textField addAction:[UIAction actionWithTitle:@""
++                                                image:nil
++                                           identifier:endActionIdentifier
++                                              handler:^(__kindof UIAction *_Nonnull action) {
++                                                     weakKeyboardAvoidConstraint.priority = UILayoutPriorityDefaultLow;
++                                                     weakRestingBottomConstraint.priority = UILayoutPriorityDefaultHigh;
++                                                     [weakChromeHostView setNeedsLayout];
++                                                   }]
++            forControlEvents:UIControlEventEditingDidEnd];
++      };
 +
 +      UIGlassEffect *glassEffect = [UIGlassEffect effectWithStyle:UIGlassEffectStyleRegular];
 +      glassEffect.interactive = YES;
@@ -449,6 +481,7 @@ index 5970e3e3a624b9498b8dedfc16831df03a274d0c..c78fdee16af3c1a0e060f167eab05ce9
 +        searchBar.searchTextField.adjustsFontForContentSizeCategory = YES;
 +        searchBar.searchTextField.textColor = UIColor.labelColor;
 +        searchBar.searchTextField.tintColor = UIColor.labelColor;
++        configureKeyboardTracking(searchBar.searchTextField);
 +        if (placeholder != nil) {
 +          searchBar.searchTextField.attributedPlaceholder =
 +              [[NSAttributedString alloc] initWithString:placeholder attributes:placeholderAttributes];
@@ -481,6 +514,7 @@ index 5970e3e3a624b9498b8dedfc16831df03a274d0c..c78fdee16af3c1a0e060f167eab05ce9
 +        searchField.adjustsFontForContentSizeCategory = YES;
 +        searchField.textColor = UIColor.labelColor;
 +        searchField.tintColor = UIColor.labelColor;
++        configureKeyboardTracking(searchField);
 +        searchField.translatesAutoresizingMaskIntoConstraints = NO;
 +        [glassView.contentView addSubview:searchField];
 +        [NSLayoutConstraint activateConstraints:@[
@@ -553,7 +587,7 @@ index 5970e3e3a624b9498b8dedfc16831df03a274d0c..c78fdee16af3c1a0e060f167eab05ce9
  
    // Setting navigation bar visibility is split to mitigate iOS 26 bug with bar button items
    // (setting nav bar visibility should be done after `navitem.*BarButtonItems`).
-@@ -773,6 +1123,7 @@ - (void)applySemanticContentAttributeIfNeededToNavCtrl:(UINavigationController *
+@@ -773,6 +1157,7 @@ - (void)applySemanticContentAttributeIfNeededToNavCtrl:(UINavigationController *
  
  - (NSArray<UIBarButtonItem *> *)barButtonItemsFromConfigs:(NSArray<NSDictionary<NSString *, id> *> *)dicts
                                           withCurrentItems:(NSArray<UIBarButtonItem *> *)currentItems
@@ -561,7 +595,7 @@ index 5970e3e3a624b9498b8dedfc16831df03a274d0c..c78fdee16af3c1a0e060f167eab05ce9
  {
    if (dicts.count == 0) {
      return currentItems;
-@@ -781,7 +1132,197 @@ - (void)applySemanticContentAttributeIfNeededToNavCtrl:(UINavigationController *
+@@ -781,7 +1166,197 @@ - (void)applySemanticContentAttributeIfNeededToNavCtrl:(UINavigationController *
    [items addObjectsFromArray:currentItems];
    for (NSUInteger i = 0; i < dicts.count; i++) {
      NSDictionary *dict = dicts[i];
@@ -760,7 +794,7 @@ index 5970e3e3a624b9498b8dedfc16831df03a274d0c..c78fdee16af3c1a0e060f167eab05ce9
        RNSBarButtonItem *item = [[RNSBarButtonItem alloc] initWithConfig:dict
            action:^(NSString *buttonId) {
              auto eventEmitter = std::static_pointer_cast<const facebook::react::RNSScreenStackHeaderConfigEventEmitter>(
-@@ -809,11 +1350,15 @@ - (void)applySemanticContentAttributeIfNeededToNavCtrl:(UINavigationController *
+@@ -809,11 +1384,15 @@ - (void)applySemanticContentAttributeIfNeededToNavCtrl:(UINavigationController *
          [items addObject:item];
        }
      } else if (dict[@"spacing"]) {
@@ -780,7 +814,7 @@ index 5970e3e3a624b9498b8dedfc16831df03a274d0c..c78fdee16af3c1a0e060f167eab05ce9
        NSNumber *index = dict[@"index"];
        if (index.integerValue < items.count) {
          [items insertObject:item atIndex:index.integerValue];
-@@ -825,6 +1370,47 @@ - (void)applySemanticContentAttributeIfNeededToNavCtrl:(UINavigationController *
+@@ -825,6 +1404,47 @@ - (void)applySemanticContentAttributeIfNeededToNavCtrl:(UINavigationController *
    return items;
  }
  
@@ -828,7 +862,7 @@ index 5970e3e3a624b9498b8dedfc16831df03a274d0c..c78fdee16af3c1a0e060f167eab05ce9
  RNS_IGNORE_SUPER_CALL_BEGIN
  - (void)insertReactSubview:(RNSScreenStackHeaderSubview *)subview atIndex:(NSInteger)atIndex
  {
-@@ -1013,6 +1599,8 @@ - (void)updateProps:(react::Props::Shared const &)props oldProps:(react::Props::
+@@ -1013,6 +1633,8 @@ - (void)updateProps:(react::Props::Shared const &)props oldProps:(react::Props::
    }
  
    _title = RCTNSStringFromStringNilIfEmpty(newScreenProps.title);
@@ -837,7 +871,7 @@ index 5970e3e3a624b9498b8dedfc16831df03a274d0c..c78fdee16af3c1a0e060f167eab05ce9
    if (newScreenProps.titleFontFamily != oldScreenProps.titleFontFamily) {
      _titleFontFamily = RCTNSStringFromStringNilIfEmpty(newScreenProps.titleFontFamily);
    }
-@@ -1038,6 +1626,7 @@ - (void)updateProps:(react::Props::Shared const &)props oldProps:(react::Props::
+@@ -1038,6 +1660,7 @@ - (void)updateProps:(react::Props::Shared const &)props oldProps:(react::Props::
    _disableBackButtonMenu = newScreenProps.disableBackButtonMenu;
    _backButtonDisplayMode =
        [RNSConvert UINavigationItemBackButtonDisplayModeFromCppEquivalent:newScreenProps.backButtonDisplayMode];
@@ -845,7 +879,7 @@ index 5970e3e3a624b9498b8dedfc16831df03a274d0c..c78fdee16af3c1a0e060f167eab05ce9
  
    if (newScreenProps.userInterfaceStyle != oldScreenProps.userInterfaceStyle) {
      _userInterfaceStyle = [RNSConvert UIUserInterfaceStyleFromCppEquivalent:newScreenProps.userInterfaceStyle];
-@@ -1084,6 +1673,30 @@ - (void)updateProps:(react::Props::Shared const &)props oldProps:(react::Props::
+@@ -1084,6 +1707,30 @@ - (void)updateProps:(react::Props::Shared const &)props oldProps:(react::Props::
      _headerRightBarButtonItems = array;
    }
  
