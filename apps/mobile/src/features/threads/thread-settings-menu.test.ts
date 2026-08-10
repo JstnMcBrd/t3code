@@ -3,11 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { ProviderInstanceId, type ProviderOptionDescriptor } from "@t3tools/contracts";
 
 import type { ModelOption, ProviderGroup } from "../../lib/modelOptions";
-import {
-  buildThreadSettingsMenu,
-  NESTED_PICKS_KEEP_MENU_PRESENTED,
-  type ThreadSettingsMenuEvent,
-} from "./thread-settings-menu";
+import { buildThreadSettingsMenu, type ThreadSettingsMenuEvent } from "./thread-settings-menu";
 
 function modelOption(
   model: string,
@@ -210,17 +206,19 @@ describe("buildThreadSettingsMenu", () => {
     });
   });
 
-  it("keeps the menu presented for top-level toggles and per-flag nested picks", () => {
+  it("keeps the menu presented only for top-level toggles", () => {
     const menu = buildThreadSettingsMenu(baseInput());
 
     // Root-level boolean toggles refresh in place with clean chrome, so they
-    // always keep the menu presented.
+    // keep the menu presented.
     expect(
       menu.actions.find((action) => action.title === "Fast mode")?.attributes?.keepsMenuPresented,
     ).toBe(true);
 
-    // Nested picks follow the UX-comparison flag.
-    const expected = NESTED_PICKS_KEEP_MENU_PRESENTED ? true : undefined;
+    // Picks inside nested submenus close the menu: staying presented leaves
+    // the submenu on screen with an expanded-submenu header, and the
+    // bottom-anchored collapse back out drops by the levels' height delta.
+    const expected = undefined;
     const modelItems = menu.actions.find((action) => action.title === "Model")?.subactions ?? [];
     const reasoningItems =
       menu.actions.find((action) => action.title === "Reasoning")?.subactions ?? [];
