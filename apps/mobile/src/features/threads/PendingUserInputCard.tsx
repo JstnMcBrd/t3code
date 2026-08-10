@@ -1,5 +1,6 @@
 import type { ApprovalRequestId, UserInputQuestion } from "@t3tools/contracts";
-import { Pressable, ScrollView, View } from "react-native";
+import { useCallback, useRef } from "react";
+import { Pressable, ScrollView, View, type LayoutChangeEvent } from "react-native";
 import Animated, { FadeInUp, FadeOutDown, LinearTransition } from "react-native-reanimated";
 
 import { SymbolView } from "../../components/AppSymbol";
@@ -25,6 +26,12 @@ export interface PendingUserInputCardProps {
   readonly onToggleCollapsed: () => void;
   /** Renders a stop control on the collapsed bar, which replaces the composer. */
   readonly onStopThread?: () => void;
+  /**
+   * Reports how far the expanded card extends above the bar footprint, so the
+   * host can add that coverage to the thread feed's end inset (animated) and
+   * keep the end of the chat visible above the card.
+   */
+  readonly onCardCoverageChange?: (coverage: number) => void;
   readonly drafts: Record<string, PendingUserInputDraftAnswer>;
   readonly answers: Record<string, string | ReadonlyArray<string>> | null;
   readonly respondingUserInputId: ApprovalRequestId | null;
@@ -54,9 +61,31 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
   const iconSubtle = useThemeColor("--color-icon-subtle");
   const questionCount = props.pendingUserInput.questions.length;
 
+  const onCardCoverageChange = props.onCardCoverageChange;
+  const barHeightRef = useRef(0);
+  const cardHeightRef = useRef(0);
+  const notifyCoverage = useCallback(() => {
+    onCardCoverageChange?.(Math.max(0, cardHeightRef.current - barHeightRef.current));
+  }, [onCardCoverageChange]);
+  const handleBarLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      barHeightRef.current = event.nativeEvent.layout.height;
+      notifyCoverage();
+    },
+    [notifyCoverage],
+  );
+  const handleCardLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      cardHeightRef.current = event.nativeEvent.layout.height;
+      notifyCoverage();
+    },
+    [notifyCoverage],
+  );
+
   return (
     <View className="relative">
       <View
+        onLayout={handleBarLayout}
         pointerEvents={props.collapsed ? "auto" : "none"}
         accessibilityElementsHidden={!props.collapsed}
         importantForAccessibility={props.collapsed ? "auto" : "no-hide-descendants"}
@@ -94,6 +123,7 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
         // feed with no blur behind it, so a translucent background renders
         // the questions on top of whatever message happens to sit underneath.
         <Animated.View
+          onLayout={handleCardLayout}
           entering={FadeInUp.duration(220)}
           exiting={FadeOutDown.duration(160)}
           layout={CARD_LAYOUT_TRANSITION}

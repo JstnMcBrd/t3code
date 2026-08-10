@@ -41,7 +41,13 @@ import {
   KeyboardStickyView,
   useKeyboardState,
 } from "react-native-keyboard-controller";
-import Animated, { FadeInDown, FadeOut } from "react-native-reanimated";
+import Animated, {
+  FadeInDown,
+  FadeOut,
+  useAnimatedReaction,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ControlPill } from "../../components/ControlPill";
@@ -301,6 +307,28 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
     Math.max(0, estimatedOverlayHeight - nativeInsetOvercount),
     -nativeInsetOvercount,
   );
+  // The expanded questionnaire is an absolute overlay, so it never changes
+  // the measured overlay height (that constancy is what keeps the feed from
+  // snapping on collapse/expand). Its coverage above the bar footprint is
+  // instead added to the feed's end inset HERE, animated in sync with the
+  // card's 220ms rise/sink, so the end of the chat glides up above the card
+  // the way it does for the keyboard.
+  const [userInputCardCoverage, setUserInputCardCoverage] = useState(0);
+  const pendingCardInsetExtra = useSharedValue(0);
+  const combinedContentInsetEndAdjustment = useSharedValue(
+    Math.max(0, estimatedOverlayHeight - nativeInsetOvercount),
+  );
+  useAnimatedReaction(
+    () => contentInsetEndAdjustment.value + pendingCardInsetExtra.value,
+    (value) => {
+      combinedContentInsetEndAdjustment.value = value;
+    },
+  );
+  const userInputInsetExtraTarget =
+    activeUserInputRequestId !== null && !userInputCollapsed ? userInputCardCoverage : 0;
+  useEffect(() => {
+    pendingCardInsetExtra.value = withTiming(userInputInsetExtraTarget, { duration: 220 });
+  }, [pendingCardInsetExtra, userInputInsetExtraTarget]);
   const { freeze, scrollMessageToEnd } = useKeyboardScrollToEnd({ listRef });
   const showContent = props.showContent ?? true;
   const layoutVariant = props.layoutVariant ?? "compact";
@@ -457,7 +485,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
             listRef={listRef}
             freeze={freeze}
             anchorMessageId={anchorMessageId}
-            contentInsetEndAdjustment={contentInsetEndAdjustment}
+            contentInsetEndAdjustment={combinedContentInsetEndAdjustment}
             contentTopInset={0}
             contentBottomInset={estimatedOverlayHeight}
             contentMaxWidth={contentMaxWidth}
@@ -558,6 +586,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                       collapsed={userInputCollapsed}
                       onToggleCollapsed={handleToggleUserInputCollapsed}
                       onStopThread={props.onStopThread}
+                      onCardCoverageChange={setUserInputCardCoverage}
                       drafts={props.activePendingUserInputDrafts}
                       answers={props.activePendingUserInputAnswers}
                       respondingUserInputId={props.respondingUserInputId}
