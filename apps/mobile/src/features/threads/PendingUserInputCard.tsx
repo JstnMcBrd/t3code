@@ -1,6 +1,6 @@
 import type { ApprovalRequestId, UserInputQuestion } from "@t3tools/contracts";
 import { Pressable, ScrollView, View } from "react-native";
-import Animated, { LinearTransition } from "react-native-reanimated";
+import Animated, { FadeIn, FadeInUp, FadeOut, LinearTransition } from "react-native-reanimated";
 
 import { SymbolView } from "../../components/AppSymbol";
 import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
@@ -37,10 +37,11 @@ export interface PendingUserInputCardProps {
 }
 
 /**
- * Both states render the same animated root so React keeps one view and the
- * layout transition morphs the frame between the composer-style bar and the
- * full card (and glides the keyboard-driven max-height changes) instead of
- * snapping.
+ * The bar and the card swap via keyed remounts with enter/exit animations —
+ * frame-morphing one view between shapes this different strands it mid-flight
+ * detached from the bottom slot. The layout transition stays on the expanded
+ * card only, where it glides the keyboard-driven max-height changes of a
+ * stable view.
  */
 const CARD_LAYOUT_TRANSITION = LinearTransition.duration(200);
 
@@ -51,7 +52,9 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
   if (props.collapsed) {
     return (
       <Animated.View
-        layout={CARD_LAYOUT_TRANSITION}
+        key="pending-user-input-bar"
+        entering={FadeIn.duration(180)}
+        exiting={FadeOut.duration(120)}
         className="flex-row items-center gap-2 rounded-full border border-neutral-200 bg-neutral-100 py-1.5 pl-4 pr-1.5 dark:border-white/6 dark:bg-neutral-900"
       >
         <Pressable
@@ -89,6 +92,9 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
   // on top of whatever message happens to sit underneath.
   return (
     <Animated.View
+      key="pending-user-input-card"
+      entering={FadeInUp.duration(220)}
+      exiting={FadeOut.duration(120)}
       layout={CARD_LAYOUT_TRANSITION}
       className="overflow-hidden gap-2.5 rounded-[20px] border border-neutral-200 bg-neutral-100 p-4 dark:border-white/6 dark:bg-neutral-900"
       style={{ maxHeight: props.maxHeight }}
