@@ -3,7 +3,11 @@ import { describe, expect, it } from "vite-plus/test";
 import { ProviderInstanceId, type ProviderOptionDescriptor } from "@t3tools/contracts";
 
 import type { ModelOption, ProviderGroup } from "../../lib/modelOptions";
-import { buildThreadSettingsMenu, type ThreadSettingsMenuEvent } from "./thread-settings-menu";
+import {
+  buildThreadSettingsMenu,
+  NESTED_PICKS_KEEP_MENU_PRESENTED,
+  type ThreadSettingsMenuEvent,
+} from "./thread-settings-menu";
 
 function modelOption(
   model: string,
@@ -213,27 +217,29 @@ describe("buildThreadSettingsMenu", () => {
     });
   });
 
-  it("keeps the menu presented only for top-level toggles", () => {
+  it("keeps the menu presented for top-level toggles and per-flag nested picks", () => {
     const menu = buildThreadSettingsMenu(baseInput());
 
-    // Root-level boolean toggles refresh in place with clean chrome.
+    // Root-level boolean toggles refresh in place with clean chrome, so they
+    // always keep the menu presented.
     expect(
       menu.actions.find((action) => action.title === "Fast mode")?.attributes?.keepsMenuPresented,
     ).toBe(true);
 
-    // Picks inside nested submenus close the menu: iOS keeps the *submenu*
-    // presented otherwise, rendering an expanded-submenu header with no way
-    // to pop back to the root.
+    // Nested picks follow the UX-comparison flag.
+    const expected = NESTED_PICKS_KEEP_MENU_PRESENTED ? true : undefined;
     const modelItems = menu.actions.find((action) => action.title === "Model")?.subactions ?? [];
     const reasoningItems =
       menu.actions.find((action) => action.title === "Reasoning")?.subactions ?? [];
     const runtimeItems =
       menu.actions.find((action) => action.title === "Runtime")?.subactions ?? [];
-    expect(
-      [...modelItems, ...reasoningItems, ...runtimeItems].every(
-        (action) => action.attributes?.keepsMenuPresented === undefined,
-      ),
-    ).toBe(true);
+    const nestedPicks = [...modelItems, ...reasoningItems, ...runtimeItems].filter(
+      (action) => action.subactions === undefined,
+    );
+    expect(nestedPicks.length).toBeGreaterThan(0);
+    expect(nestedPicks.every((action) => action.attributes?.keepsMenuPresented === expected)).toBe(
+      true,
+    );
 
     // The sheet hand-off must dismiss the menu before presenting.
     expect(menu.actions.at(-1)?.subactions?.[0]?.attributes).toBeUndefined();

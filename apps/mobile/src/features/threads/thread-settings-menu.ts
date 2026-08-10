@@ -36,6 +36,16 @@ export function selectableChoices(
   );
 }
 
+/**
+ * UX comparison toggle. When true, a pick inside a nested submenu keeps the
+ * menu presented — iOS keeps *that submenu* on screen with an
+ * expanded-submenu header (there is no way to pop back to the root), and the
+ * checkmark/header refresh in place. When false, nested picks close the menu
+ * (ChatGPT-style). Top-level boolean toggles keep the menu presented either
+ * way, since the root refreshes with clean chrome.
+ */
+export const NESTED_PICKS_KEEP_MENU_PRESENTED = true;
+
 export type ThreadSettingsMenuEvent =
   | { readonly type: "select-model"; readonly option: ModelOption }
   | { readonly type: "set-option"; readonly optionId: string; readonly value: string | boolean }
@@ -72,12 +82,13 @@ export function buildThreadSettingsMenu(input: {
     option.selection.instanceId === input.selectedModel?.instanceId &&
     option.selection.model === input.selectedModel.model;
 
-  // Only top-level leaves (boolean toggles) keep the menu presented (iOS
-  // 16+): the root refreshes in place with clean chrome. A pick inside a
-  // nested submenu would keep THAT submenu on screen — iOS renders it with an
-  // expanded-submenu header and offers no way to pop back to the root — so
-  // nested picks close the menu instead.
+  // Top-level leaves (boolean toggles) always keep the menu presented (iOS
+  // 16+): the root refreshes in place with clean chrome. Nested picks follow
+  // NESTED_PICKS_KEEP_MENU_PRESENTED.
   const keepPresented = { keepsMenuPresented: true } as const;
+  const nestedPickAttributes = NESTED_PICKS_KEEP_MENU_PRESENTED
+    ? { attributes: keepPresented }
+    : {};
 
   const modelAction = (option: ModelOption, id: string): MenuAction => {
     events.set(id, { type: "select-model", option });
@@ -86,6 +97,7 @@ export function buildThreadSettingsMenu(input: {
       title: option.label,
       ...(option.isDefault ? { subtitle: "Default" } : {}),
       state: isSelected(option) ? "on" : "off",
+      ...nestedPickAttributes,
     };
   };
 
@@ -167,6 +179,7 @@ export function buildThreadSettingsMenu(input: {
         id,
         title: choice.label,
         state: choice.id === currentValue ? "on" : "off",
+        ...nestedPickAttributes,
       };
     });
     if (choices.length === 0) {
@@ -195,6 +208,7 @@ export function buildThreadSettingsMenu(input: {
         id,
         title: choice.label,
         state: choice.mode === input.runtimeMode ? "on" : "off",
+        ...nestedPickAttributes,
       };
     }),
   });
