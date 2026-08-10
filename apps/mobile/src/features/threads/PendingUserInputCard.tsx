@@ -1,7 +1,9 @@
 import type { ApprovalRequestId, UserInputQuestion } from "@t3tools/contracts";
 import { useCallback, useRef } from "react";
 import { Pressable, ScrollView, View, type LayoutChangeEvent } from "react-native";
-import Animated, { FadeInUp, FadeOutDown, LinearTransition } from "react-native-reanimated";
+import Animated, { Easing, FadeInUp, FadeOutDown, LinearTransition } from "react-native-reanimated";
+
+import { USER_INPUT_TOGGLE_DURATION_MS } from "./pendingUserInputLayout";
 
 import { SymbolView } from "../../components/AppSymbol";
 import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
@@ -124,8 +126,12 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
         // the questions on top of whatever message happens to sit underneath.
         <Animated.View
           onLayout={handleCardLayout}
-          entering={FadeInUp.duration(220)}
-          exiting={FadeOutDown.duration(160)}
+          entering={FadeInUp.duration(USER_INPUT_TOGGLE_DURATION_MS).easing(
+            Easing.out(Easing.cubic),
+          )}
+          exiting={FadeOutDown.duration(USER_INPUT_TOGGLE_DURATION_MS).easing(
+            Easing.out(Easing.cubic),
+          )}
           layout={CARD_LAYOUT_TRANSITION}
           className="absolute inset-x-0 bottom-0 overflow-hidden gap-2.5 rounded-[20px] border border-neutral-200 bg-neutral-100 p-4 dark:border-white/6 dark:bg-neutral-900"
           style={{ maxHeight: props.maxHeight }}

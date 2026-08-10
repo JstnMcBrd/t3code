@@ -9,6 +9,12 @@ const PENDING_USER_INPUT_VERTICAL_GAP = 12;
  */
 export const ESTIMATED_KEYBOARD_HEIGHT = 336;
 
+/**
+ * One clock for the questionnaire expand/collapse choreography: the card's
+ * enter/exit and the feed-inset glide must share it or they visibly drift.
+ */
+export const USER_INPUT_TOGGLE_DURATION_MS = 170;
+
 export function derivePendingUserInputMaxHeight(input: {
   readonly windowHeight: number;
   readonly keyboardHeight: number;

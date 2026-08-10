@@ -42,6 +42,7 @@ import {
   useKeyboardState,
 } from "react-native-keyboard-controller";
 import Animated, {
+  Easing,
   FadeInDown,
   FadeOut,
   useAnimatedReaction,
@@ -67,6 +68,7 @@ import { PendingUserInputCard } from "./PendingUserInputCard";
 import {
   derivePendingUserInputMaxHeight,
   ESTIMATED_KEYBOARD_HEIGHT,
+  USER_INPUT_TOGGLE_DURATION_MS,
 } from "./pendingUserInputLayout";
 import {
   COMPOSER_COLLAPSED_CHROME,
@@ -324,12 +326,42 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
       combinedContentInsetEndAdjustment.value = value;
     },
   );
+  const { freeze, scrollMessageToEnd } = useKeyboardScrollToEnd({ listRef });
   const userInputInsetExtraTarget =
     activeUserInputRequestId !== null && !userInputCollapsed ? userInputCardCoverage : 0;
+  const endFollowEnabledRef = useRef(true);
+  endFollowEnabledRef.current = endFollowEnabled;
   useEffect(() => {
-    pendingCardInsetExtra.value = withTiming(userInputInsetExtraTarget, { duration: 220 });
-  }, [pendingCardInsetExtra, userInputInsetExtraTarget]);
-  const { freeze, scrollMessageToEnd } = useKeyboardScrollToEnd({ listRef });
+    const expanding = userInputInsetExtraTarget > pendingCardInsetExtra.value;
+    if (expanding) {
+      // Expanding: glide the end of the chat up above the rising card.
+      pendingCardInsetExtra.value = withTiming(userInputInsetExtraTarget, {
+        duration: USER_INPUT_TOGGLE_DURATION_MS,
+        easing: Easing.out(Easing.cubic),
+      });
+    } else {
+      // Collapsing: the sinking card still covers the strip being revealed,
+      // so an instant step is invisible behind it.
+      pendingCardInsetExtra.value = userInputInsetExtraTarget;
+    }
+    if (!endFollowEnabledRef.current) {
+      return;
+    }
+    // The list's own corrections for these inset changes drift on short
+    // content (and the error compounds across toggles), so deterministically
+    // re-pin the end once the change settles: a no-op when the resting
+    // position is already right, corrective when it is not. On collapse the
+    // correction lands while the sinking card still covers the strip.
+    const timer = setTimeout(
+      () => {
+        void scrollMessageToEnd({ animated: false, closeKeyboard: false }).catch(() => {
+          freeze.set(false);
+        });
+      },
+      expanding ? USER_INPUT_TOGGLE_DURATION_MS + 50 : 60,
+    );
+    return () => clearTimeout(timer);
+  }, [freeze, pendingCardInsetExtra, scrollMessageToEnd, userInputInsetExtraTarget]);
   const showContent = props.showContent ?? true;
   const layoutVariant = props.layoutVariant ?? "compact";
   const isSplitLayout = layoutVariant === "split";
