@@ -1,7 +1,6 @@
 import type { ApprovalRequestId, UserInputQuestion } from "@t3tools/contracts";
-import type { ComponentProps } from "react";
 import { Pressable, ScrollView, View } from "react-native";
-import Animated, { FadeIn, FadeInUp, FadeOut } from "react-native-reanimated";
+import Animated, { FadeIn, FadeInUp, FadeOut, LinearTransition } from "react-native-reanimated";
 
 import { SymbolView } from "../../components/AppSymbol";
 import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
@@ -16,8 +15,12 @@ import {
 
 export interface PendingUserInputCardProps {
   readonly pendingUserInput: PendingUserInput;
-  /** Animated max-height tracking the keyboard, applied to the expanded card. */
-  readonly maxHeightStyle: ComponentProps<typeof Animated.View>["style"];
+  /**
+   * Constant while a request is pending (it reserves keyboard space), so the
+   * keyboard transition is pure translation; changes only on rare discrete
+   * corrections, which the layout transition smooths.
+   */
+  readonly maxHeight: number;
   readonly collapsed: boolean;
   readonly onToggleCollapsed: () => void;
   /** Renders a stop control on the collapsed bar, which replaces the composer. */
@@ -41,10 +44,10 @@ export interface PendingUserInputCardProps {
 /**
  * The bar and the card swap via keyed remounts with enter/exit animations —
  * frame-morphing one view between shapes this different strands it mid-flight
- * detached from the bottom slot. The expanded card's height needs no layout
- * transition: its animated max-height style already tracks the keyboard
- * frame-by-frame.
+ * detached from the bottom slot.
  */
+const CARD_LAYOUT_TRANSITION = LinearTransition.duration(200);
+
 export function PendingUserInputCard(props: PendingUserInputCardProps) {
   const iconSubtle = useThemeColor("--color-icon-subtle");
   const questionCount = props.pendingUserInput.questions.length;
@@ -94,9 +97,12 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
     <Animated.View
       key="pending-user-input-card"
       entering={FadeInUp.duration(220)}
-      exiting={FadeOut.duration(120)}
+      // Kept short: the ghost overlays the transcript while the feed inset
+      // snaps to the bar height underneath it.
+      exiting={FadeOut.duration(90)}
+      layout={CARD_LAYOUT_TRANSITION}
       className="overflow-hidden gap-2.5 rounded-[20px] border border-neutral-200 bg-neutral-100 p-4 dark:border-white/6 dark:bg-neutral-900"
-      style={props.maxHeightStyle}
+      style={{ maxHeight: props.maxHeight }}
     >
       <Pressable
         accessibilityRole="button"

@@ -40,9 +40,8 @@ import {
   KeyboardController,
   KeyboardStickyView,
   useKeyboardState,
-  useReanimatedKeyboardAnimation,
 } from "react-native-keyboard-controller";
-import Animated, { FadeInDown, FadeOut, useAnimatedStyle } from "react-native-reanimated";
+import Animated, { FadeInDown, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ControlPill } from "../../components/ControlPill";
@@ -59,7 +58,10 @@ import type {
 } from "../../lib/threadActivity";
 import { PendingApprovalCard } from "./PendingApprovalCard";
 import { PendingUserInputCard } from "./PendingUserInputCard";
-import { derivePendingUserInputMaxHeight } from "./pendingUserInputLayout";
+import {
+  derivePendingUserInputMaxHeight,
+  ESTIMATED_KEYBOARD_HEIGHT,
+} from "./pendingUserInputLayout";
 import {
   COMPOSER_COLLAPSED_CHROME,
   COMPOSER_EXPANDED_CHROME,
@@ -258,21 +260,31 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
       setCollapsedUserInputRequestId(activeUserInputRequestId);
     }
   }, [activeUserInputRequestId, userInputCollapsed]);
-  // The card's max height tracks the keyboard's ANIMATED height, so it
-  // resizes frame-by-frame with the keyboard instead of correcting itself in
-  // a second animation once the hide settles (the binary visibility state
-  // only flips on keyboardDidHide).
-  const keyboardAnimation = useReanimatedKeyboardAnimation();
-  const pendingUserInputMaxHeightStyle = useAnimatedStyle(() => ({
-    maxHeight: derivePendingUserInputMaxHeight({
-      windowHeight,
-      keyboardHeight: Math.abs(keyboardAnimation.height.value),
-      navigationHeaderHeight,
-      // The questionnaire owns the composer slot, so only the composer's
-      // bottom inset still overlaps.
-      composerOverlapHeight: composerBottomInset,
-    }),
-  }));
+  // The card's height RESERVES keyboard space at all times instead of
+  // tracking the keyboard: transforms (the sticky translation) apply
+  // same-frame on the UI thread while layout props lag a Yoga pass behind,
+  // so any height that follows the keyboard flashes the card over the nav
+  // header on the way up. With a constant height the keyboard transition is
+  // pure translation — frame-perfect by construction — and the resting card
+  // stays compact over the transcript. Before the first open the reserve is
+  // an estimate; once a real height is known the card corrects once,
+  // discretely.
+  const measuredKeyboardHeight = useKeyboardState((state) => state.height);
+  const [lastKnownKeyboardHeight, setLastKnownKeyboardHeight] = useState(0);
+  useEffect(() => {
+    if (measuredKeyboardHeight > 0 && measuredKeyboardHeight !== lastKnownKeyboardHeight) {
+      setLastKnownKeyboardHeight(measuredKeyboardHeight);
+    }
+  }, [lastKnownKeyboardHeight, measuredKeyboardHeight]);
+  const pendingUserInputMaxHeight = derivePendingUserInputMaxHeight({
+    windowHeight,
+    keyboardHeight:
+      lastKnownKeyboardHeight > 0 ? lastKnownKeyboardHeight : ESTIMATED_KEYBOARD_HEIGHT,
+    navigationHeaderHeight,
+    // The questionnaire owns the composer slot, so only the composer's
+    // bottom inset still overlaps.
+    composerOverlapHeight: composerBottomInset,
+  });
   const estimatedOverlayHeight = composerOverlapHeight;
   // The overlay's measured height includes the home-indicator inset (the
   // composer pads it), but contentInsetAdjustmentBehavior="automatic" makes
@@ -542,7 +554,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                   {props.activePendingUserInput ? (
                     <PendingUserInputCard
                       pendingUserInput={props.activePendingUserInput}
-                      maxHeightStyle={pendingUserInputMaxHeightStyle}
+                      maxHeight={pendingUserInputMaxHeight}
                       collapsed={userInputCollapsed}
                       onToggleCollapsed={handleToggleUserInputCollapsed}
                       onStopThread={props.onStopThread}
