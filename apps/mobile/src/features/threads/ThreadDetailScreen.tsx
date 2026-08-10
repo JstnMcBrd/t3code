@@ -453,7 +453,17 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                     colorScheme={isDarkMode ? "dark" : "light"}
                     effect="regular"
                     interactive
-                    style={{ borderRadius: 18, height: 36, overflow: "hidden", width: 36 }}
+                    // Interactive glass can render larger than the requested
+                    // box (minimum touch size), so center the pill instead of
+                    // relying on it filling the glass exactly.
+                    style={{
+                      alignItems: "center",
+                      borderRadius: 18,
+                      height: 36,
+                      justifyContent: "center",
+                      overflow: "hidden",
+                      width: 36,
+                    }}
                   >
                     <ControlPill
                       accessibilityLabel="Scroll to end"
