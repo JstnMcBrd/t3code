@@ -1,8 +1,10 @@
 import type { ApprovalRequestId, UserInputQuestion } from "@t3tools/contracts";
 import { Pressable, ScrollView, View } from "react-native";
+import Animated, { LinearTransition } from "react-native-reanimated";
 
 import { SymbolView } from "../../components/AppSymbol";
 import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
+import { ControlPill } from "../../components/ControlPill";
 import { cn } from "../../lib/cn";
 import { useThemeColor } from "../../lib/useThemeColor";
 import {
@@ -16,6 +18,8 @@ export interface PendingUserInputCardProps {
   readonly maxHeight: number;
   readonly collapsed: boolean;
   readonly onToggleCollapsed: () => void;
+  /** Renders a stop control on the collapsed bar, which replaces the composer. */
+  readonly onStopThread?: () => void;
   readonly drafts: Record<string, PendingUserInputDraftAnswer>;
   readonly answers: Record<string, string | ReadonlyArray<string>> | null;
   readonly respondingUserInputId: ApprovalRequestId | null;
@@ -32,28 +36,51 @@ export interface PendingUserInputCardProps {
   readonly onSubmit: () => Promise<unknown>;
 }
 
+/**
+ * Both states render the same animated root so React keeps one view and the
+ * layout transition morphs the frame between the composer-style bar and the
+ * full card (and glides the keyboard-driven max-height changes) instead of
+ * snapping.
+ */
+const CARD_LAYOUT_TRANSITION = LinearTransition.duration(200);
+
 export function PendingUserInputCard(props: PendingUserInputCardProps) {
   const iconSubtle = useThemeColor("--color-icon-subtle");
   const questionCount = props.pendingUserInput.questions.length;
 
   if (props.collapsed) {
     return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Expand user input, ${questionCount} question${
-          questionCount === 1 ? "" : "s"
-        }`}
-        onPress={props.onToggleCollapsed}
-        className="flex-row items-center gap-2 self-center rounded-full border border-neutral-200 bg-neutral-100 py-2.5 pl-4 pr-3 active:opacity-70 dark:border-white/6 dark:bg-neutral-900"
+      <Animated.View
+        layout={CARD_LAYOUT_TRANSITION}
+        className="flex-row items-center gap-2 rounded-full border border-neutral-200 bg-neutral-100 py-1.5 pl-4 pr-1.5 dark:border-white/6 dark:bg-neutral-900"
       >
-        <Text className="font-t3-bold text-2xs uppercase tracking-[1.1px] text-sky-700 dark:text-sky-300">
-          User input needed
-        </Text>
-        <Text className="font-sans text-xs text-neutral-500 dark:text-neutral-400">
-          {questionCount} question{questionCount === 1 ? "" : "s"}
-        </Text>
-        <SymbolView name="chevron.up" size={12} tintColor={iconSubtle} type="monochrome" />
-      </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Expand user input, ${questionCount} question${
+            questionCount === 1 ? "" : "s"
+          }`}
+          onPress={props.onToggleCollapsed}
+          className="min-h-10 flex-1 flex-row items-center gap-2 active:opacity-70"
+        >
+          <Text className="font-t3-bold text-2xs uppercase tracking-[1.1px] text-sky-700 dark:text-sky-300">
+            User input needed
+          </Text>
+          <Text className="font-sans text-xs text-neutral-500 dark:text-neutral-400">
+            {questionCount} question{questionCount === 1 ? "" : "s"}
+          </Text>
+          <View className="flex-1" />
+          <SymbolView name="chevron.up" size={12} tintColor={iconSubtle} type="monochrome" />
+        </Pressable>
+        {props.onStopThread ? (
+          <ControlPill
+            accessibilityLabel="Stop"
+            icon="stop.fill"
+            variant="danger"
+            className="h-9 w-9"
+            onPress={props.onStopThread}
+          />
+        ) : null}
+      </Animated.View>
     );
   }
 
@@ -61,7 +88,8 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
   // with no blur behind it, so a translucent background renders the questions
   // on top of whatever message happens to sit underneath.
   return (
-    <View
+    <Animated.View
+      layout={CARD_LAYOUT_TRANSITION}
       className="overflow-hidden gap-2.5 rounded-[20px] border border-neutral-200 bg-neutral-100 p-4 dark:border-white/6 dark:bg-neutral-900"
       style={{ maxHeight: props.maxHeight }}
     >
@@ -160,6 +188,6 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
       >
         <Text className="font-t3-extrabold text-sm text-white">Submit answers</Text>
       </Pressable>
-    </View>
+    </Animated.View>
   );
 }

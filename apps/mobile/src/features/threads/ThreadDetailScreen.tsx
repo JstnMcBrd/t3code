@@ -234,16 +234,17 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   const selectedThreadFeed = props.selectedThreadFeed;
   const composerChrome = composerExpanded ? COMPOSER_EXPANDED_CHROME : COMPOSER_COLLAPSED_CHROME;
   const composerOverlapHeight = composerChrome + composerBottomInset;
-  // While the questionnaire is expanded it IS the input surface and the
-  // composer hides; collapsing it (keyed by request id, so a new request
-  // re-expands automatically) brings the composer back for free-text
-  // steering or stopping the turn.
+  // While a user-input request is pending, the questionnaire owns the
+  // composer slot outright: expanded it is the full card, collapsed it is a
+  // composer-style bar in the same place (with its own stop control). The
+  // composer never mounts into the transition, which keeps the collapse and
+  // keyboard animations coherent. Collapse state is keyed by request id so a
+  // new request re-expands automatically.
   const [collapsedUserInputRequestId, setCollapsedUserInputRequestId] =
     useState<ApprovalRequestId | null>(null);
   const activeUserInputRequestId = props.activePendingUserInput?.requestId ?? null;
   const userInputCollapsed =
     activeUserInputRequestId !== null && collapsedUserInputRequestId === activeUserInputRequestId;
-  const userInputExpanded = activeUserInputRequestId !== null && !userInputCollapsed;
   const handleToggleUserInputCollapsed = useCallback(() => {
     if (activeUserInputRequestId === null) {
       return;
@@ -261,8 +262,9 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
     windowHeight,
     keyboardHeight: isKeyboardVisible ? keyboardHeight : 0,
     navigationHeaderHeight,
-    // With the composer hidden, only its bottom inset still overlaps.
-    composerOverlapHeight: userInputExpanded ? composerBottomInset : composerOverlapHeight,
+    // With the composer out of the slot, only its bottom inset still overlaps.
+    composerOverlapHeight:
+      activeUserInputRequestId !== null ? composerBottomInset : composerOverlapHeight,
   });
   const estimatedOverlayHeight = composerOverlapHeight;
   // The overlay's measured height includes the home-indicator inset (the
@@ -513,9 +515,13 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
               {props.activePendingApproval || props.activePendingUserInput ? (
                 <Animated.View
                   className="shrink-0 gap-3 px-4 pb-3"
-                  // The expanded questionnaire replaces the composer, so it
-                  // must pad the home indicator the composer normally covers.
-                  style={userInputExpanded ? { paddingBottom: composerBottomInset } : undefined}
+                  // The questionnaire replaces the composer, so it must pad
+                  // the home indicator the composer normally covers.
+                  style={
+                    activeUserInputRequestId !== null
+                      ? { paddingBottom: composerBottomInset }
+                      : undefined
+                  }
                   entering={FadeInDown.duration(220)}
                   exiting={FadeOut.duration(140)}
                 >
@@ -532,6 +538,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                       maxHeight={pendingUserInputMaxHeight}
                       collapsed={userInputCollapsed}
                       onToggleCollapsed={handleToggleUserInputCollapsed}
+                      onStopThread={props.onStopThread}
                       drafts={props.activePendingUserInputDrafts}
                       answers={props.activePendingUserInputAnswers}
                       respondingUserInputId={props.respondingUserInputId}
@@ -544,9 +551,9 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
               ) : null}
             </View>
 
-            {/* Hidden (not unmounted) while the questionnaire owns the input
-                surface, so composer drafts and editor state survive. */}
-            <View style={userInputExpanded ? { display: "none" } : undefined}>
+            {/* Hidden (not unmounted) while a user-input request owns the
+                composer slot, so composer drafts and editor state survive. */}
+            <View style={activeUserInputRequestId !== null ? { display: "none" } : undefined}>
               <ThreadComposer
                 editorRef={composerEditorRef}
                 draftMessage={props.draftMessage}
