@@ -34,6 +34,8 @@ export interface PendingUserInputCardProps {
    * keep the end of the chat visible above the card.
    */
   readonly onCardCoverageChange?: (coverage: number) => void;
+  /** Fires on custom-answer focus/blur; hosts use it to vet stale keyboard state. */
+  readonly onInputFocusChange?: (focused: boolean) => void;
   readonly drafts: Record<string, PendingUserInputDraftAnswer>;
   readonly answers: Record<string, string | ReadonlyArray<string>> | null;
   readonly respondingUserInputId: ApprovalRequestId | null;
@@ -216,6 +218,8 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
                         value,
                       )
                     }
+                    onFocus={() => props.onInputFocusChange?.(true)}
+                    onBlur={() => props.onInputFocusChange?.(false)}
                     placeholder="Or type a custom answer"
                     className="min-h-[54px] rounded-2xl border border-neutral-200 bg-white px-3.5 py-3 font-sans text-base text-neutral-950 dark:border-white/8 dark:bg-neutral-950/70 dark:text-neutral-50"
                   />

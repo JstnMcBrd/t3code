@@ -118,6 +118,8 @@ export interface ThreadComposerProps {
   readonly onUpdateInteractionMode: (interactionMode: ProviderInteractionMode) => void;
   readonly onReconnectEnvironment: () => void;
   readonly onExpandedChange?: (expanded: boolean) => void;
+  /** Fires on editor focus/blur; hosts use it to vet stale keyboard state. */
+  readonly onEditorFocusChange?: (focused: boolean) => void;
 }
 
 /**
@@ -312,13 +314,16 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     }
   }, [inputRef]);
 
+  const onEditorFocusChange = props.onEditorFocusChange;
   const handleFocus = useCallback(() => {
     setIsFocused(true);
-  }, []);
+    onEditorFocusChange?.(true);
+  }, [onEditorFocusChange]);
 
   const handleBlur = useCallback(() => {
     setIsFocused(false);
-  }, []);
+    onEditorFocusChange?.(false);
+  }, [onEditorFocusChange]);
   const showStopAction =
     props.selectedThread.session?.status === "running" ||
     props.selectedThread.session?.status === "starting";

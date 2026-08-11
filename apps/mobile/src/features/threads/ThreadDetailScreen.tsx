@@ -29,6 +29,7 @@ import {
 } from "react";
 import { isLiquidGlassSupported, LiquidGlassView } from "@callstack/liquid-glass";
 import {
+  AppState,
   Keyboard,
   Platform,
   useColorScheme,
@@ -210,6 +211,38 @@ function useStreamingHaptics(threadId: ThreadId, feed: ReadonlyArray<ThreadFeedE
 export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: ThreadDetailScreenProps) {
   const insets = useSafeAreaInsets();
   const isKeyboardVisible = useKeyboardState((state) => state.isVisible);
+  const liveKeyboardHeight = useKeyboardState((state) => state.height);
+  // Android can swallow the IME hide callbacks when the app is backgrounded
+  // mid keyboard-hide (the reported repro: send — which blurs and starts the
+  // hide — then Home within a second). The keyboard library's height AND
+  // visibility then stay frozen open, so gating the sticky translation on
+  // visibility alone still strands the composer after resume. Quarantine the
+  // translation on every Android resume instead; any sign of a live keyboard
+  // stream — an owned input gaining focus, or any visibility/height movement —
+  // lifts it. A healthy resume sees no visual difference (the translation is
+  // already zero while the keyboard is closed).
+  const [keyboardStateSuspect, setKeyboardStateSuspect] = useState(false);
+  useEffect(() => {
+    if (Platform.OS !== "android") {
+      return;
+    }
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        setKeyboardStateSuspect(true);
+      }
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+  useEffect(() => {
+    setKeyboardStateSuspect(false);
+  }, [isKeyboardVisible, liveKeyboardHeight]);
+  const handleOwnedInputFocusChange = useCallback((focused: boolean) => {
+    if (focused) {
+      setKeyboardStateSuspect(false);
+    }
+  }, []);
   const windowHeight = useWindowDimensions().height;
   const navigationHeaderHeight = useContext(HeaderHeightContext) || insets.top + 44;
   const agentLabel = `${props.selectedThread.modelSelection.instanceId} agent`;
@@ -277,13 +310,12 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   // stays compact over the transcript. Before the first open the reserve is
   // an estimate; once a real height is known the card corrects once,
   // discretely.
-  const measuredKeyboardHeight = useKeyboardState((state) => state.height);
   const [lastKnownKeyboardHeight, setLastKnownKeyboardHeight] = useState(0);
   useEffect(() => {
-    if (measuredKeyboardHeight > 0 && measuredKeyboardHeight !== lastKnownKeyboardHeight) {
-      setLastKnownKeyboardHeight(measuredKeyboardHeight);
+    if (liveKeyboardHeight > 0 && liveKeyboardHeight !== lastKnownKeyboardHeight) {
+      setLastKnownKeyboardHeight(liveKeyboardHeight);
     }
-  }, [lastKnownKeyboardHeight, measuredKeyboardHeight]);
+  }, [lastKnownKeyboardHeight, liveKeyboardHeight]);
   const pendingUserInputMaxHeight = derivePendingUserInputMaxHeight({
     windowHeight,
     keyboardHeight:
@@ -539,7 +571,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
           // The animated keyboard height can remain stale after a dismissed
           // IME on both platforms. Visibility is the authoritative closed
           // state, so disable the translation rather than stranding the pill.
-          enabled={isKeyboardVisible}
+          enabled={isKeyboardVisible && !keyboardStateSuspect}
           style={{ position: "absolute", bottom: 0, left: 0, right: 0 }}
           offset={{ closed: 0, opened: 0 }}
         >
@@ -619,6 +651,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                       onToggleCollapsed={handleToggleUserInputCollapsed}
                       onStopThread={props.onStopThread}
                       onCardCoverageChange={setUserInputCardCoverage}
+                      onInputFocusChange={handleOwnedInputFocusChange}
                       drafts={props.activePendingUserInputDrafts}
                       answers={props.activePendingUserInputAnswers}
                       respondingUserInputId={props.respondingUserInputId}
@@ -662,6 +695,7 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                 onUpdateRuntimeMode={props.onUpdateThreadRuntimeMode}
                 onUpdateInteractionMode={props.onUpdateThreadInteractionMode}
                 onExpandedChange={setComposerExpanded}
+                onEditorFocusChange={handleOwnedInputFocusChange}
               />
             </View>
           </View>
