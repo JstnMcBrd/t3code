@@ -256,11 +256,16 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   const [composerExpanded, setComposerExpanded] = useState(false);
   const [anchorMessageId, setAnchorMessageId] = useState<MessageId | null>(null);
   const [endFollowEnabled, setEndFollowEnabled] = useState(true);
-  // Key the safe-area padding on keyboard visibility, not focus: on Android
-  // the back gesture closes the keyboard while the editor stays focused, and
-  // a focus-keyed inset would leave the toolbar under the gesture bar.
-  // (Ported from main's #5988 during the merge.)
-  const composerBottomInset = isKeyboardVisible ? 0 : Math.max(insets.bottom, 12);
+  // Android keys the safe-area padding on keyboard visibility (#5988): the
+  // back gesture closes the keyboard while the editor stays focused, and a
+  // focus-keyed inset would leave the toolbar under the gesture bar. iOS must
+  // NOT use visibility — it only flips on keyboardDidHide, after the hide
+  // animation, so the composer would ride down flush to the screen edge and
+  // then snap up into the inset. On iOS blur precedes the hide, so the
+  // focus-keyed inset is already in place while the composer rides down.
+  const composerBottomInset = (Platform.OS === "android" ? isKeyboardVisible : composerExpanded)
+    ? 0
+    : Math.max(insets.bottom, 12);
   const contentPresentationKind = props.contentPresentation.kind;
   // The raw sync status enters "synchronizing" on every full fetch, cached or
   // not. Whether messages are already on screen decides the pill label: no
