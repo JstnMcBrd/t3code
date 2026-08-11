@@ -2,6 +2,9 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it as effectIt } from "@effect/vitest";
 import { HostProcessEnvironment, HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import {
@@ -365,6 +368,77 @@ effectIt.layer(NodeServices.layer)("resolveCommandPath", (it) => {
       expect(result._tag).toBe("Failure");
     }),
   );
+
+  it.effect("matches a Windows PATH entry regardless of file name case", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const binDir = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-shell-" });
+      yield* fileSystem.writeFileString(path.join(binDir, "code.cmd"), "@echo off\r\n");
+
+      const resolved = yield* resolveCommandPath("code", {
+        env: { PATH: binDir, PATHEXT: ".COM;.EXE;.BAT;.CMD" },
+      }).pipe(Effect.provideService(HostProcessPlatform, "win32"));
+
+      expect(resolved.toLowerCase()).toBe(path.join(binDir, "code.cmd").toLowerCase());
+    }).pipe(Effect.scoped),
+  );
+
+  // A directory can grant search permission without read permission, so a
+  // failed listing must fall back to probing the candidate paths.
+  it.effect("probes a PATH directory that cannot be listed", () =>
+    Effect.gen(function* () {
+      const resolved = yield* resolveCommandPath("code", {
+        env: { PATH: "C:\\search-only", PATHEXT: ".COM;.EXE;.BAT;.CMD" },
+      }).pipe(Effect.provideService(HostProcessPlatform, "win32"), Effect.result);
+
+      expect(resolved._tag).toBe("Success");
+    }).pipe(
+      Effect.provide(
+        FileSystem.layerNoop({
+          readDirectory: () =>
+            Effect.fail(
+              PlatformError.systemError({
+                _tag: "PermissionDenied",
+                module: "FileSystem",
+                method: "readDirectory",
+              }),
+            ),
+          stat: () => Effect.succeed({ type: "File" } as FileSystem.File.Info),
+        }),
+      ),
+    ),
+  );
+
+  it.effect("skips a PATH directory that does not exist", () => {
+    let statCalls = 0;
+    return Effect.gen(function* () {
+      const resolved = yield* resolveCommandPath("code", {
+        env: { PATH: "C:\\missing", PATHEXT: ".COM;.EXE;.BAT;.CMD" },
+      }).pipe(Effect.provideService(HostProcessPlatform, "win32"), Effect.result);
+
+      expect(resolved._tag).toBe("Failure");
+      expect(statCalls).toBe(0);
+    }).pipe(
+      Effect.provide(
+        FileSystem.layerNoop({
+          readDirectory: () =>
+            Effect.fail(
+              PlatformError.systemError({
+                _tag: "NotFound",
+                module: "FileSystem",
+                method: "readDirectory",
+              }),
+            ),
+          stat: () =>
+            Effect.sync(() => {
+              statCalls += 1;
+              return { type: "File" } as FileSystem.File.Info;
+            }),
+        }),
+      ),
+    );
+  });
 });
 
 effectIt.layer(NodeServices.layer)("resolveSpawnCommand", (it) => {
