@@ -256,7 +256,11 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
   const [composerExpanded, setComposerExpanded] = useState(false);
   const [anchorMessageId, setAnchorMessageId] = useState<MessageId | null>(null);
   const [endFollowEnabled, setEndFollowEnabled] = useState(true);
-  const composerBottomInset = composerExpanded ? 0 : Math.max(insets.bottom, 12);
+  // Key the safe-area padding on keyboard visibility, not focus: on Android
+  // the back gesture closes the keyboard while the editor stays focused, and
+  // a focus-keyed inset would leave the toolbar under the gesture bar.
+  // (Ported from main's #5988 during the merge.)
+  const composerBottomInset = isKeyboardVisible ? 0 : Math.max(insets.bottom, 12);
   const contentPresentationKind = props.contentPresentation.kind;
   // The raw sync status enters "synchronizing" on every full fetch, cached or
   // not. Whether messages are already on screen decides the pill label: no
