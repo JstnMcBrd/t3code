@@ -384,61 +384,56 @@ effectIt.layer(NodeServices.layer)("resolveCommandPath", (it) => {
     }).pipe(Effect.scoped),
   );
 
-  // A directory can grant search permission without read permission, so a
-  // failed listing must fall back to probing the candidate paths.
-  it.effect("probes a PATH directory that cannot be listed", () =>
-    Effect.gen(function* () {
-      const resolved = yield* resolveCommandPath("code", {
-        env: { PATH: "C:\\search-only", PATHEXT: ".COM;.EXE;.BAT;.CMD" },
-      }).pipe(Effect.provideService(HostProcessPlatform, "win32"), Effect.result);
-
-      expect(resolved._tag).toBe("Success");
-    }).pipe(
-      Effect.provide(
-        FileSystem.layerNoop({
-          readDirectory: () =>
-            Effect.fail(
-              PlatformError.systemError({
-                _tag: "PermissionDenied",
-                module: "FileSystem",
-                method: "readDirectory",
-              }),
-            ),
-          stat: () => Effect.succeed({ type: "File" } as FileSystem.File.Info),
+  const failingListingLayer = (reason: PlatformError.SystemErrorTag, onStat: () => void) =>
+    FileSystem.layerNoop({
+      readDirectory: () =>
+        Effect.fail(
+          PlatformError.systemError({
+            _tag: reason,
+            module: "FileSystem",
+            method: "readDirectory",
+          }),
+        ),
+      stat: () =>
+        Effect.sync(() => {
+          onStat();
+          return { type: "File" } as FileSystem.File.Info;
         }),
-      ),
-    ),
-  );
+    });
 
-  it.effect("skips a PATH directory that does not exist", () => {
-    let statCalls = 0;
-    return Effect.gen(function* () {
-      const resolved = yield* resolveCommandPath("code", {
-        env: { PATH: "C:\\missing", PATHEXT: ".COM;.EXE;.BAT;.CMD" },
-      }).pipe(Effect.provideService(HostProcessPlatform, "win32"), Effect.result);
+  // A listing that did not happen proves nothing. Trusting it would hide an
+  // installed command for the whole cache window, so anything short of proof
+  // that the directory cannot hold a command falls back to probing.
+  for (const reason of ["PermissionDenied", "Busy", "Unknown"] as const) {
+    it.effect(`probes a PATH directory that fails to list with ${reason}`, () =>
+      Effect.gen(function* () {
+        // A distinct directory per case: the listing cache is keyed by
+        // directory and shared process-wide, so a reused path would answer
+        // from the previous case instead of exercising this one.
+        const resolved = yield* resolveCommandPath("code", {
+          env: { PATH: `C:\\unreadable-${reason}`, PATHEXT: ".COM;.EXE;.BAT;.CMD" },
+        }).pipe(Effect.provideService(HostProcessPlatform, "win32"), Effect.result);
 
-      expect(resolved._tag).toBe("Failure");
-      expect(statCalls).toBe(0);
-    }).pipe(
-      Effect.provide(
-        FileSystem.layerNoop({
-          readDirectory: () =>
-            Effect.fail(
-              PlatformError.systemError({
-                _tag: "NotFound",
-                module: "FileSystem",
-                method: "readDirectory",
-              }),
-            ),
-          stat: () =>
-            Effect.sync(() => {
-              statCalls += 1;
-              return { type: "File" } as FileSystem.File.Info;
-            }),
-        }),
-      ),
+        expect(resolved._tag).toBe("Success");
+      }).pipe(Effect.provide(failingListingLayer(reason, () => undefined))),
     );
-  });
+  }
+
+  // A directory that is absent or is not a walkable directory at all can never
+  // hold a command, so it should be skipped.
+  for (const reason of ["NotFound", "BadResource"] as const) {
+    it.effect(`skips a PATH directory that fails to list with ${reason}`, () => {
+      let statCalls = 0;
+      return Effect.gen(function* () {
+        const resolved = yield* resolveCommandPath("code", {
+          env: { PATH: `C:\\unusable-${reason}`, PATHEXT: ".COM;.EXE;.BAT;.CMD" },
+        }).pipe(Effect.provideService(HostProcessPlatform, "win32"), Effect.result);
+
+        expect(resolved._tag).toBe("Failure");
+        expect(statCalls).toBe(0);
+      }).pipe(Effect.provide(failingListingLayer(reason, () => (statCalls += 1))));
+    });
+  }
 });
 
 effectIt.layer(NodeServices.layer)("resolveSpawnCommand", (it) => {

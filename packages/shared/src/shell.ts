@@ -508,10 +508,18 @@ const PATH_LISTING_CACHE_TTL_NANOS = 30_000_000_000n;
 const PATH_LISTING_CACHE_MAX_ENTRIES = 256;
 
 interface PathListingCacheEntry {
-  /** `null` when the directory cannot be listed. */
+  /** `null` when the listing failed but the directory may still hold commands. */
   readonly names: ReadonlySet<string> | null;
   readonly expiresAtNanos: bigint;
 }
+
+// Failure reasons that prove the PATH entry can never hold a command, so an
+// empty listing is the correct answer.
+const UNUSABLE_DIRECTORY_REASONS: ReadonlySet<string> = new Set([
+  "NotFound",
+  "BadResource",
+  "BadArgument",
+]);
 
 // The cache lives in the Effect environment (like HostProcessPlatform above)
 // so tests and embedders can provide an isolated instance; the default is a
@@ -525,9 +533,9 @@ export const PathListingCache = Context.Reference<Map<string, PathListingCacheEn
 
 /**
  * Lists the file names in a PATH directory, memoized for
- * {@link PATH_LISTING_CACHE_TTL_NANOS}. A missing or invalid directory lists as
- * empty. A directory that denies read permission lists as `null`, which tells
- * callers to probe candidate paths directly.
+ * {@link PATH_LISTING_CACHE_TTL_NANOS}. A directory that can never hold a
+ * command lists as empty; see {@link UNUSABLE_DIRECTORY_REASONS}. Any other
+ * failure lists as `null`, which tells callers to probe candidate paths directly.
  */
 const listPathDirectory = Effect.fn("shell.listPathDirectory")(function* (
   directory: string,
@@ -545,7 +553,7 @@ const listPathDirectory = Effect.fn("shell.listPathDirectory")(function* (
   const entries = yield* fileSystem.readDirectory(directory).pipe(
     Effect.catchTags({
       PlatformError: (error) =>
-        Effect.succeed(error.reason._tag === "PermissionDenied" ? null : []),
+        Effect.succeed(UNUSABLE_DIRECTORY_REASONS.has(error.reason._tag) ? [] : null),
     }),
   );
   const names = entries === null ? null : new Set(entries.map((e) => e.toLowerCase()));
