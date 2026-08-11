@@ -1,6 +1,6 @@
 import type { ApprovalRequestId, UserInputQuestion } from "@t3tools/contracts";
 import { useCallback, useRef } from "react";
-import { Pressable, ScrollView, View, type LayoutChangeEvent } from "react-native";
+import { Platform, Pressable, ScrollView, View, type LayoutChangeEvent } from "react-native";
 import Animated, { Easing, FadeInUp, FadeOutDown, LinearTransition } from "react-native-reanimated";
 
 import { USER_INPUT_TOGGLE_DURATION_MS } from "./pendingUserInputLayout";
@@ -53,12 +53,20 @@ export interface PendingUserInputCardProps {
 }
 
 /**
- * The collapsed bar is the PERMANENT in-flow footprint — the expanded card is
- * an absolutely-positioned overlay rising above it. The overlay's measured
- * height (which drives the thread feed's bottom inset) therefore never
- * changes on collapse/expand, so the transcript stays perfectly still while
- * the card animates over it.
+ * On iOS the collapsed bar is the PERMANENT in-flow footprint — the expanded
+ * card is an absolutely-positioned overlay rising above it. The overlay's
+ * measured height (which drives the thread feed's bottom inset) therefore
+ * never changes on collapse/expand, so the transcript stays perfectly still
+ * while the card animates over it.
+ *
+ * Android cannot use the overlay: it does not hit-test touches outside a
+ * parent's bounds, which made everything above the bar-sized wrapper
+ * untouchable. There the expanded card renders in-flow instead (the wrapper
+ * grows with it, and the host skips the coverage inset since the measured
+ * overlay already includes the card).
  */
+const EXPANDED_CARD_IS_OVERLAY = Platform.OS === "ios";
+
 const CARD_LAYOUT_TRANSITION = LinearTransition.duration(200);
 
 export function PendingUserInputCard(props: PendingUserInputCardProps) {
@@ -86,42 +94,45 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
     [notifyCoverage],
   );
 
+  const showBar = props.collapsed || EXPANDED_CARD_IS_OVERLAY;
   return (
     <View className="relative">
-      <View
-        onLayout={handleBarLayout}
-        pointerEvents={props.collapsed ? "auto" : "none"}
-        accessibilityElementsHidden={!props.collapsed}
-        importantForAccessibility={props.collapsed ? "auto" : "no-hide-descendants"}
-        className="flex-row items-center gap-2 rounded-full border border-neutral-200 bg-neutral-100 py-1.5 pl-4 pr-1.5 dark:border-white/6 dark:bg-neutral-900"
-      >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Expand user input, ${questionCount} question${
-            questionCount === 1 ? "" : "s"
-          }`}
-          onPress={props.onToggleCollapsed}
-          className="min-h-10 flex-1 flex-row items-center gap-2 active:opacity-70"
+      {showBar ? (
+        <View
+          onLayout={handleBarLayout}
+          pointerEvents={props.collapsed ? "auto" : "none"}
+          accessibilityElementsHidden={!props.collapsed}
+          importantForAccessibility={props.collapsed ? "auto" : "no-hide-descendants"}
+          className="flex-row items-center gap-2 rounded-full border border-neutral-200 bg-neutral-100 py-1.5 pl-4 pr-1.5 dark:border-white/6 dark:bg-neutral-900"
         >
-          <Text className="font-t3-bold text-2xs uppercase tracking-[1.1px] text-sky-700 dark:text-sky-300">
-            User input needed
-          </Text>
-          <Text className="font-sans text-xs text-neutral-500 dark:text-neutral-400">
-            {questionCount} question{questionCount === 1 ? "" : "s"}
-          </Text>
-          <View className="flex-1" />
-          <SymbolView name="chevron.up" size={12} tintColor={iconSubtle} type="monochrome" />
-        </Pressable>
-        {props.onStopThread ? (
-          <ControlPill
-            accessibilityLabel="Stop"
-            icon="stop.fill"
-            variant="danger"
-            className="h-9 w-9"
-            onPress={props.onStopThread}
-          />
-        ) : null}
-      </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Expand user input, ${questionCount} question${
+              questionCount === 1 ? "" : "s"
+            }`}
+            onPress={props.onToggleCollapsed}
+            className="min-h-10 flex-1 flex-row items-center gap-2 active:opacity-70"
+          >
+            <Text className="font-t3-bold text-2xs uppercase tracking-[1.1px] text-sky-700 dark:text-sky-300">
+              User input needed
+            </Text>
+            <Text className="font-sans text-xs text-neutral-500 dark:text-neutral-400">
+              {questionCount} question{questionCount === 1 ? "" : "s"}
+            </Text>
+            <View className="flex-1" />
+            <SymbolView name="chevron.up" size={12} tintColor={iconSubtle} type="monochrome" />
+          </Pressable>
+          {props.onStopThread ? (
+            <ControlPill
+              accessibilityLabel="Stop"
+              icon="stop.fill"
+              variant="danger"
+              className="h-9 w-9"
+              onPress={props.onStopThread}
+            />
+          ) : null}
+        </View>
+      ) : null}
       {props.collapsed ? null : (
         // The surface is opaque on purpose: the card floats over the thread
         // feed with no blur behind it, so a translucent background renders
@@ -135,7 +146,10 @@ export function PendingUserInputCard(props: PendingUserInputCardProps) {
             Easing.out(Easing.cubic),
           )}
           layout={CARD_LAYOUT_TRANSITION}
-          className="absolute inset-x-0 bottom-0 overflow-hidden gap-2.5 rounded-[20px] border border-neutral-200 bg-neutral-100 p-4 dark:border-white/6 dark:bg-neutral-900"
+          className={cn(
+            EXPANDED_CARD_IS_OVERLAY && "absolute inset-x-0 bottom-0",
+            "overflow-hidden gap-2.5 rounded-[20px] border border-neutral-200 bg-neutral-100 p-4 dark:border-white/6 dark:bg-neutral-900",
+          )}
           style={{ maxHeight: props.maxHeight }}
         >
           <Pressable

@@ -359,8 +359,13 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
     },
   );
   const { freeze, scrollMessageToEnd } = useKeyboardScrollToEnd({ listRef });
+  // Android renders the expanded card in-flow (it cannot hit-test the iOS
+  // overlay outside the bar's bounds), so its measured overlay height already
+  // includes the card — the coverage extra is iOS-only.
   const userInputInsetExtraTarget =
-    activeUserInputRequestId !== null && !userInputCollapsed ? userInputCardCoverage : 0;
+    Platform.OS === "ios" && activeUserInputRequestId !== null && !userInputCollapsed
+      ? userInputCardCoverage
+      : 0;
   const endFollowEnabledRef = useRef(true);
   endFollowEnabledRef.current = endFollowEnabled;
   useEffect(() => {
